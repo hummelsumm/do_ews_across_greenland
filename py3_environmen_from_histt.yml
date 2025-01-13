@@ -1,0 +1,19 @@
+name: standard
+channels:
+  - ConorIA
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - numpy
+  - matplotlib
+  - jupyter
+  - xarray
+  - scipy
+  - tqdm
+  - openpyxl
+  - xlrd
+  - h5netcdf
+  - cartopy
+  - cmocean
+prefix: /Users/chu017/anaconda3/envs/standard

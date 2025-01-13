@@ -1,0 +1,19 @@
+name: py27
+channels:
+  - ConorIA
+  - conda-forge
+  - defaults
+dependencies:
+  - python=2.7
+  - numpy
+  - scipy=1.2.1
+  - armadillo
+  - tqdm=4.64.1
+  - boost
+  - diffpy::boost-all
+  - xarray
+  - nb_conda_kernels
+  - jupyterlab
+  - xlrd
+  - statsmodels=0.10.2
+prefix: /Users/chu017/anaconda3/envs/py27
