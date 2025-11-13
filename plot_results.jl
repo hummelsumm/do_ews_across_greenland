@@ -64,7 +64,7 @@ journal = "esd" #nothing #"esd","cd"
 plim = 0.05
 lowpass = true
 smoothw = false
-saving = false
+saving = true
 showing = true
 
 letters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
@@ -127,10 +127,28 @@ function sstring(s::String)
     return new_str
 end
 
+my_cdf(d,n) = cdf(d,n-1)
+my_ecdf(arr, n) = ecdf(arr)(n-1)
+
+function significance_threshold(dist, p; test_vals = [1,2,3,4,5,6,7])
+    if typeof(dist) == distribution_significant_increases #numeric
+        pv = round(1-p , digits=2)
+        if pv ∉ dist.pvals
+            error("Please choose p s.t. 1-p ∈ $(dist.pvals)")
+        end
+        nums = dist.num_inc_one[dist.pvals .== pv,:][:]
+        threshold = findfirst(>(p),[my_ecdf(nums,i) for i in test_vals])
+
+    elseif typeof(dist) == Binomial{Float64} #analytical
+        threshold = test_vals[findfirst(>(p),my_cdf.(dist,test_vals))]
+    else 
+        error("dist must be of type distribution_significant_increases or Binomial{Float64}")
+    end
+    threshold
+end
 
 
-
-#Fig. 10
+#Fig. 10, S14
 function get_numbers_base_cases(;lowpass= lowpass, showing = true, saving = false, saveto = "paper/result_overview_n_inc_lowpass_$(lowpass)_smoothw_false_p_0.05.pdf")
     function get_n(x,plim)
         n=0
@@ -145,8 +163,8 @@ function get_numbers_base_cases(;lowpass= lowpass, showing = true, saving = fals
     end
 
     b = Distributions.Binomial(17,0.05)
-    thr95 = quantile(b,0.95)
-    thr90 = quantile(b,0.9)
+    thr95 = significance_threshold(b, 0.95)
+    thr90 = significance_threshold(b, 0.9)
 
     cases = [L"\textbf{\mathrm{\sigma^𝟤}}",L"\mathrm{\alpha_𝟣}",L"$\textbf{\mathrm{\hat{𝗐}^𝟤}}$, 𝟣𝟢-𝟧𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}}$, 𝟣𝟢-𝟧𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟣𝟢-𝟧𝟢 𝗒, 𝖬𝗈𝗋𝗅𝖾𝗍", L"$\mathrm{\hat{𝖧}}$, 𝟣𝟢-𝟧𝟢 𝗒, 𝖬𝗈𝗋𝗅𝖾𝗍", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}_{𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅}}$"]
 
@@ -267,14 +285,14 @@ function get_numbers_base_cases(;lowpass= lowpass, showing = true, saving = fals
     end
     #plot that:
     f= Figure(size=(1200,1000))
-    cases2 = [L"\mathrm{\sigma^𝟤}",
+    cases2 = [L"\mathrm{𝖵}",
               L"\mathrm{\alpha_𝟣}",
               L"$\mathrm{\hat{𝗐}^𝟤_{𝟣𝟢,𝟧𝟢}}$ (𝖯𝖺𝗎𝗅)", 
-              L"$\mathrm{\hat{𝖧}_{𝟣𝟢,𝟧𝟢}}$ (𝖯𝖺𝗎𝗅)",
+              L"$\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}_{𝟣𝟢,𝟧𝟢}}$ (𝖯𝖺𝗎𝗅)",
               L"$\mathrm{\hat{𝗐}^𝟤_{𝟣𝟢,𝟧𝟢}}$ (𝖬𝗈𝗋𝗅𝖾𝗍)", 
-              L"$\mathrm{\hat{𝖧}_{𝟣𝟢,𝟧𝟢}}$ (𝖬𝗈𝗋𝗅𝖾𝗍)", 
+              L"$\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}_{𝟣𝟢,𝟧𝟢}}$ (𝖬𝗈𝗋𝗅𝖾𝗍)", 
               L"$\mathrm{\hat{𝗐}^𝟤_{𝟤𝟢,𝟨𝟢}}$ (𝖯𝖺𝗎𝗅)", 
-              L"$\mathrm{\hat{𝖧}_{𝟤𝟢,𝟨𝟢}}$ (𝖯𝖺𝗎𝗅)"]
+              L"$\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}_{𝟤𝟢,𝟨𝟢}}$ (𝖯𝖺𝗎𝗅)"]
 
     ax = Axis(f[1,1],
         title = "Significance of the observed number of EWS",
@@ -293,10 +311,10 @@ function get_numbers_base_cases(;lowpass= lowpass, showing = true, saving = fals
     n_max = maximum(skipmissing(justn))
     co = cgrad(:amp, n_max+1, categorical = true, alpha=0.9)
 
-    hm = heatmap!(ax, justn, colormap = co)#, colorrange= (0,200))
+    hm = heatmap!(ax, justn, colormap = co, nan_color=:grey60)#, colorrange= (0,200))
     translate!(hm, 0,0,-100)
     ga = f[1,2] = GridLayout()
-    co_bar = cgrad([:white,co...], n_max+2, categorical=true)
+    co_bar = cgrad([:grey60,co...], n_max+2, categorical=true)
     Colorbar(ga[2,1], colormap = co_bar, colorrange = (0,n_max+2),
             ticks = (0.5:1:Int(n_max+1)+0.5, ["undefined", string.(0:1:Int(n_max))...]),
                 label = "No. of significant EWS (p<0.05)",
@@ -332,8 +350,1142 @@ function get_numbers_base_cases(;lowpass= lowpass, showing = true, saving = fals
     
 end
 
-get_numbers_base_cases(showing=showing,saving=saving, lowpass = false, saveto = "figures/fig10.pdf")
 
+get_numbers_base_cases(showing=showing,saving=true, lowpass = true, saveto = "do_ews_across_greenland_ice_cores/figures/new_fig10.pdf")
+get_numbers_base_cases(showing=showing,saving=true, lowpass = false, saveto = "do_ews_across_greenland_ice_cores/figures/new_figS14.pdf")
+
+
+
+####### NEW aggregated plot #################
+
+function aggregated_plot(;lowpass= lowpass, showing = true, saving = false, saveto = "paper/result_overview_n_inc_lowpass_$(lowpass)_smoothw_false_p_0.05.pdf")
+    
+
+    #cases = [L"\textbf{\mathrm{\sigma^𝟤}}",L"\mathrm{\alpha_𝟣}", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}_{𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅}}$"]
+    
+
+    
+    ngrip5_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/sca/s1_20_s2_60_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/s1_20_s2_60_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    ngrip10_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NGRIP_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/ac/w_200_normed_filt_NGRIP_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/sca/s1_20_s2_60_NGRIP_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/hurst/s1_20_s2_60_NGRIP_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    neem_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NEEM_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/ac/w_200_normed_filt_NEEM_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/sca/s1_20_s2_60_NEEM_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/hurst/s1_20_s2_60_NEEM_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    ngrip20_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    grip_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_GRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_GRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_GRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_GRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+    
+    gisp2_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_GISP2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_GISP2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_GISP2_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_GISP2_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+    if lowpass == false
+        ngrip5_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/sca/s1_20_s2_60_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/hurst/s1_20_s2_60_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+        ngrip10_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/ac/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/sca/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/hurst/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+        
+        neem_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NEEM_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/ac/w_200_normed_filt_NEEM_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/sca/s1_20_s2_60_NEEM_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/hurst/s1_20_s2_60_NEEM_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    end
+
+
+    f= Figure(size=(1200,500))
+
+
+    cases2 = [L"\mathrm{𝖵𝖺𝗋}",
+              L"\mathrm{\alpha_𝟣}",
+              L"$\mathrm{\hat{𝗐}^𝟤_{𝟤𝟢,𝟨𝟢}}$",# (𝖯𝖺𝗎𝗅)", 
+              L"$\mathrm{\hat{𝖧}_{𝟤𝟢,𝟨𝟢}}$"]# (𝖯𝖺𝗎𝗅)"]
+
+    ax = Axis(f[1,1],
+        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xreversed = true,
+        yreversed=true,
+        xlabel = "Event",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+        ylabel = "Ice core",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        )
+
+    
+    new_mat = zeros(2*17,2*6)
+    for (i,core) in enumerate([ngrip5_paths, ngrip10_paths, neem_paths, ngrip20_paths, grip_paths, gisp2_paths])
+        for (j,path) in enumerate(core)     
+            ind = load(path)["slopes"]
+            for ev in 1:17
+                if j==1
+                    new_mat[2*ev,2*i-1]=1
+                elseif j==2
+                    new_mat[2*ev-1,2*i-1]=2
+                elseif j==3
+                    new_mat[2*ev,2*i]=3
+                elseif j==4
+                    new_mat[2*ev-1,2*i]=4
+                end
+                if typeof(ind.slopes[ev]) != Nothing
+                    if ind.slopes[ev]>0 && ind.p_one[ev] < plim
+                        if j==1
+                            text!(ax, ev+0.25,i-0.25, text = L"𝖵",align = (:center, :center))
+                            new_mat[2*ev,2*i-1]+=4
+                        elseif j==2
+                            text!(ax, ev-0.25,i-0.25, text = L"\alpha_𝟣",align = (:center, :center))
+                            new_mat[2*ev-1,2*i-1]+=4
+                        elseif j==3
+                            text!(ax, ev+0.25,i+0.25, text = L"\hat{𝗐}^𝟤",align = (:center, :center))
+                            new_mat[2*ev,2*i]+=4
+                        elseif j==4
+                            text!(ax, ev-0.25,i+0.25, text = L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}",align = (:center, :center))
+                            new_mat[2*ev-1,2*i]+=4
+                        end
+                    end
+                end
+            end
+            
+        end
+    end
+    #t1 = cgrad(:managua, 4, categorical=true )
+    #t2 = cgrad(:roma, 4, categorical=true )
+    t3 = cgrad(:Spectral_4, 4, categorical=true )
+    co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.8,0.8,0.8,0.8])   
+    
+    #co2 = cgrad([:seagreen3, :dodgerblue3, :goldenrod1, :firebrick, :seagreen3, :dodgerblue3, :goldenrod1, :firebrick], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.6,0.6,0.6,0.6])#[0.1,0.1,0.1,0.1,1,1,1,1])    
+    ##co2 = cgrad([[i for i in t1]...,[i for i in t1]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.7,0.7,0.7,0.7])
+    #co2 = cgrad([t2[3],t2[4],t2[1],t2[1],t2[3],t2[4],t2[1],t2[2]],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.75,0.75,0.75,0.75])    
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.75,0.75,0.75,0.75])     
+    #co2 = cgrad([:steelblue1, :steelblue2, :steelblue3, :steelblue, :firebrick1, :firebrick2, :firebrick3, :firebrick], 8, categorical = true, alpha=[0.2,0.2,0.2,0.2,0.8,0.8,0.8,0.8])
+    #co2 = cgrad([:grey70, :grey70, :grey70, :grey70, :firebrick3, :firebrick3, :firebrick3, :firebrick3], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.8,0.8,0.8,0.8])
+    hm2 = heatmap!(ax, 0.5:0.5:17.5,0.5:0.5:6.5, new_mat, colormap = co2, colorrange=extrema(new_mat))
+    #Colorbar(f[1,2],hm2)
+    translate!(hm2, 0,0,-100)
+
+    elems= [
+        [PolyElement(color = co2[3], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = co2[4], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = co2[1], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = co2[2], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = co2[3], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = co2[4], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = co2[5], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = co2[2], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = co2[3], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = co2[4], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = co2[1], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = co2[6], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = co2[7], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = co2[4], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = co2[1], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = co2[2], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = co2[3], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = co2[8], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = co2[1], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = co2[2], strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])]
+    ]
+
+     Legend(f[1,2], elems, [L"𝗇𝗈𝗇𝖾",  L"𝖵", L"\alpha_𝟣", L"\hat{𝗐}^𝟤", L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}"],#[L"𝗇𝗈𝗇𝖾 $ $", cases2...], 
+                "significant increase in",
+                titlefont=:regular,
+                titlegap=15,
+                rowgap = 20, 
+                framevisible = false, #false,
+                framecolor = :grey70,
+                tellwidth = true,
+                #tellheight=true,
+                orientation = :vertical,
+                patchsize=(30,40),
+                patchlabelgap=10,
+                )
+    colgap!(f.layout,40)
+    if showing
+        display(f)
+    end
+    if saving
+        save(saveto, f)
+    end
+    
+end
+aggregated_plot(lowpass=true, saving=false, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview_lp_colourful2.pdf")
+aggregated_plot(lowpass=false, saving=false, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview_no_lp_colourful2.pdf")
+
+
+function aggregated_plot2(;lowpass= lowpass, showing = true, saving = false, saveto = "paper/result_overview_n_inc_lowpass_$(lowpass)_smoothw_false_p_0.05.pdf")
+    #cases = [L"\textbf{\mathrm{\sigma^𝟤}}",L"\mathrm{\alpha_𝟣}", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}_{𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅}}$"]
+    
+    ngrip5_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/sca/s1_20_s2_60_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/s1_20_s2_60_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    ngrip10_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NGRIP_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/ac/w_200_normed_filt_NGRIP_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/sca/s1_20_s2_60_NGRIP_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/hurst/s1_20_s2_60_NGRIP_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    neem_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NEEM_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/ac/w_200_normed_filt_NEEM_lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/sca/s1_20_s2_60_NEEM_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/10y/hurst/s1_20_s2_60_NEEM_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    ngrip20_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+    grip_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_GRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_GRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_GRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_GRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+    
+    gisp2_paths = ["new_surrogate_files/20y/var/w_200_normed_filt_GISP2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/ac/w_200_normed_filt_GISP2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/sca/s1_20_s2_60_GISP2_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/20y/hurst/s1_20_s2_60_GISP2_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+    if lowpass == false
+        ngrip5_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/sca/s1_20_s2_60_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/hurst/s1_20_s2_60_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+        ngrip10_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/ac/w_200_normed_filt_NGRIP_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/sca/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/hurst/s1_20_s2_60_NGRIP_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+        
+        neem_paths = ["new_surrogate_files/10y/var/w_200_normed_filt_NEEM_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/ac/w_200_normed_filt_NEEM_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/sca/s1_20_s2_60_NEEM_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/10y/hurst/s1_20_s2_60_NEEM_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    end
+
+
+    f= Figure(size=(1200,600))
+
+    function get_n(x,plim)
+        n=0
+        for ev in 1:17
+            if typeof(x.slopes[ev]) != Nothing
+                if x.slopes[ev] >0  && x.p_one[ev] < plim
+                    n+=1
+                end
+            end
+        end
+        return n
+    end
+
+
+    cases2 = [L"\mathrm{𝖵𝖺𝗋}",
+              L"\mathrm{\alpha_𝟣}",
+              L"$\mathrm{\hat{𝗐}^𝟤_{𝟤𝟢,𝟨𝟢}}$",# (𝖯𝖺𝗎𝗅)", 
+              L"$\mathrm{\hat{𝖧}_{𝟤𝟢,𝟨𝟢}}$"]# (𝖯𝖺𝗎𝗅)"]
+
+    gl = f[1,1] = GridLayout()
+    ax = Axis(gl[1,1],
+        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xreversed = true,
+        yreversed=true,
+        xlabel = "Event",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+        ylabel = "Ice core",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        )
+    
+    gr = f[1,2] = GridLayout(width=80)
+    ax2 = Axis(gr[1,1],
+        #xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xticks=[0.5],
+        xreversed = true,
+        yreversed=true,
+        #xlabel = "Transition",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+        #ylabel = "Method",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        xticksvisible = false,
+        xticklabelsvisible = false,
+        yticksvisible = false,
+        yticklabelsvisible = false
+        )
+
+    
+    new_mat = zeros(2*17,2*6)
+    num_mat = zeros(2,2*6)
+    for (i,core) in enumerate([ngrip5_paths, ngrip10_paths, neem_paths, ngrip20_paths, grip_paths, gisp2_paths])
+        for (j,path) in enumerate(core)     
+            ind = load(path)["slopes"]
+            n_h = get_n(ind,0.05)
+            t_c =  :black #:grey60
+            if n_h >= 4
+                t_f = :bold
+                f_s = 16
+                #t_c =  :grey60
+            else
+                t_f = :regular
+                f_s = 15
+                #t_c =  :black
+            end
+
+            if j==1
+                text!(ax2, 0.75,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i-1]=n_h   
+            elseif j==2
+                text!(ax2, 0.25,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i-1]=n_h
+            elseif j==3
+                text!(ax2, 0.75,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i]=n_h
+            elseif j==4
+                text!(ax2, 0.25,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i]=n_h
+            end
+
+            for ev in 1:17
+                # if j==1
+                #     new_mat[2*ev,2*i-1]=1
+                # elseif j==2
+                #     new_mat[2*ev-1,2*i-1]=2
+                # elseif j==3
+                #     new_mat[2*ev,2*i]=3
+                # elseif j==4
+                #     new_mat[2*ev-1,2*i]=4
+                # end
+                if typeof(ind.slopes[ev]) != Nothing
+                    if ind.slopes[ev]>0
+                        if j==1
+                            #text!(ax, ev+0.25,i-0.25, text = L"𝖵",align = (:center, :center))
+                            new_mat[2*ev,2*i-1]+=1
+                        elseif j==2
+                            #text!(ax, ev-0.25,i-0.25, text = L"\alpha_𝟣",align = (:center, :center))
+                            new_mat[2*ev-1,2*i-1]+=1
+                        elseif j==3
+                            #text!(ax, ev+0.25,i+0.25, text = L"\hat{𝗐}^𝟤",align = (:center, :center))
+                            new_mat[2*ev,2*i]+=1
+                        elseif j==4
+                            #text!(ax, ev-0.25,i+0.25, text = L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}",align = (:center, :center))
+                            new_mat[2*ev-1,2*i]+=1
+                        end
+                        
+                        tc2 = :black
+                        fs2 = 16
+                        if ind.p_one[ev] < plim
+                            if j==1
+                                text!(ax, ev+0.25,i-0.25, text = L"\mathbf{𝖵}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i-1]+=1
+                            elseif j==2
+                                text!(ax, ev-0.25,i-0.25, text = L"\mathbf{\alpha_𝟣}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev-1,2*i-1]+=1
+                            elseif j==3
+                                text!(ax, ev+0.25,i+0.25, text = L"\mathbf{\hat{𝗐}^𝟤}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i]+=1
+                            elseif j==4
+                                text!(ax, ev-0.25,i+0.25, text = L"\mathbf{\hat{𝖧}^{\text{𝗅𝗈𝖼}}}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev-1,2*i]+=1
+                            end
+                        end
+                    end
+                end
+            end
+            
+        end
+    end
+    #t1 = cgrad(:managua, 4, categorical=true )
+    #t2 = cgrad(:roma, 4, categorical=true )
+    #t3 = cgrad(:Spectral_4, 4, categorical=true )
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.8,0.8,0.8,0.8])   
+    
+    #co2 = cgrad([:seagreen3, :dodgerblue3, :goldenrod1, :firebrick, :seagreen3, :dodgerblue3, :goldenrod1, :firebrick], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.6,0.6,0.6,0.6])#[0.1,0.1,0.1,0.1,1,1,1,1])    
+    ##co2 = cgrad([[i for i in t1]...,[i for i in t1]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.7,0.7,0.7,0.7])
+    #co2 = cgrad([t2[3],t2[4],t2[1],t2[1],t2[3],t2[4],t2[1],t2[2]],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.75,0.75,0.75,0.75])    
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.75,0.75,0.75,0.75])     
+    #co2 = cgrad([:steelblue1, :steelblue2, :steelblue3, :steelblue, :firebrick1, :firebrick2, :firebrick3, :firebrick], 8, categorical = true, alpha=[0.2,0.2,0.2,0.2,0.8,0.8,0.8,0.8])
+    # co2 = cgrad([:grey70, :grey70, :grey70, :grey70, :firebrick3, :firebrick3, :firebrick3, :firebrick3], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.8,0.8,0.8,0.8])
+    
+    co2 = cgrad([:steelblue, :darkred, :firebrick], 3, categorical = true, alpha=[0.12,0.12,0.8])
+    #co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.15,0.15,1])
+    hm2 = heatmap!(ax, 0.5:0.5:17.5,0.5:0.5:6.5, new_mat, colormap = co2, colorrange=extrema(new_mat))
+    #Colorbar(f[1,2],hm2)
+    translate!(hm2, 0,0,-100)
+
+    n_max = Int(maximum(num_mat))
+    #@show n_max
+    co = cgrad(:amp, n_max+1, categorical = true, alpha=0.55)
+    # if lowpass
+    #     co = cgrad(:amp, n_max+1, categorical = true, alpha=[0.7,0.7,0.7,0.7,0.9,0.9])
+    # else
+    #     co = cgrad(:amp, n_max+1, categorical = true, alpha=[0.7,0.7,0.7,0.7,0.9])
+    # end
+    # hm_n = heatmap!(ax2, 0.5:0.5:1,0.5:0.5:4.5, num_mat, colormap = co)
+    hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:6.5, num_mat, colormap = co, colorrange=(0,n_max))
+    #hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:4.5, num_mat, colormap =Makie.Categorical(:amp),colorrange=(0,n_max))
+    Colorbar(gr[1,end+1], #hm_n,
+        colormap = co, 
+        colorrange=(0,n_max+1),
+        ticks = (0.5:1:n_max+0.5, string.(0:1:n_max)), 
+        #ticks = 0.5:1:n_max+1.5,
+        label = "No. of significant EWS (p<0.05)",
+        halign=:left)
+
+    translate!(hm_n, 0,0,-100)
+
+
+
+    Label(gl[1,1,TopLeft()], "(a)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    Label(gr[1,1,TopLeft()], "(b)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    elems2 = [
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        #MarkerElement(color = :black, marker = 'x', markersize = 15, points = Point2f[(0.25, 0.75)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])],
+        [MarkerElement(color = co2[1], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color =co2[2], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color = co2[3], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        ]
+    Legend(f[end+1,1], elems2, [ L"𝖵", L"\alpha_𝟣", L"\hat{𝗐}_{𝟤𝟢,𝟨𝟢}^𝟤", L"\hat{𝖧}_{𝟤𝟢,𝟨𝟢}^{\text{𝗅𝗈𝖼}}", "decreasing", "increasing","significantly increasing (p<$(plim))"],
+                "EWS indicators",
+                titleposition=:top,
+                #titlefont=:regular,
+                #titlegap=15,
+                rowgap = 15, 
+                framevisible = false, #false,
+                framecolor = :grey70,
+                tellwidth = false,
+                tellheight=true,
+                orientation = :horizontal,
+                patchsize=(30,40),
+                patchlabelgap=10,
+                )
+    
+    colgap!(f.layout,20)
+    if showing
+        display(f)
+    end
+    if saving
+        save(saveto, f)
+    end
+    
+end
+aggregated_plot2(lowpass = true, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_lp.pdf")
+aggregated_plot2(lowpass = false, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_no_lp.pdf")
+
+
+function aggregated_plot2_method(;lowpass= lowpass, showing = true, saving = false, saveto = "paper/result_overview_method_lowpass_$(lowpass)_smoothw_false_p_0.05.pdf")
+    #cases = [L"\textbf{\mathrm{\sigma^𝟤}}",L"\mathrm{\alpha_𝟣}", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}_{𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅}}$"]
+    
+    boers_paths = ["new_surrogate_files/NGRIP5/var/NIKLAS_w_200_N_lowpass_py2_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_10000_FOURIER.jld2",
+                    "new_surrogate_files/NGRIP5/ac/NIKLAS_w_200_N_lowpass_py2_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_10000_FOURIER.jld2",
+                    "new_surrogate_files/NGRIP5/sca/NIKLAS_s1_10_s2_50_N_lowpass_py2_PAUL_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_smoothw_true_10000_FOURIER.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/NIKLAS_s1_10_s2_50_N_lowpass_py2_PAUL_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_smoothw_true_10000_FOURIER.jld2"]
+    
+    step1_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_N_lowpass_py2_gs_short_FiltInd_true_onlyfull_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_N_lowpass_py2_gs_short_FiltInd_true_onlyfull_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_N_lowpass_py2_PAUL_normed_gs_short_FiltInd_true_normalise_false_nocoi_false_onlyfull_false_smoothw_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_N_lowpass_py2_PAUL_normed_gs_short_FiltInd_true_normalise_false_nocoi_false_onlyfull_false_smoothw_true_10000_TFTS.jld2"]
+    
+    step2_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_N_lowpass_py2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_N_lowpass_py2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_N_lowpass_py2_PAUL_normed_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_false_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_N_lowpass_py2_PAUL_normed_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_false_smoothw_false_10000_TFTS.jld2"]
+                    
+    step3_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+    
+   #irregular_paths = []
+
+    
+    #Morlet_paths = []
+
+    if lowpass == false
+       
+        step3_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+        #irregular_paths = []
+
+
+        #Morlet_paths = []
+    end
+
+    
+    f= Figure(size=(1200,500))
+
+    function get_n(x,plim)
+        n=0
+        for ev in 1:17
+            if typeof(x.slopes[ev]) != Nothing
+                if x.slopes[ev] >0  && x.p_one[ev] < plim
+                    n+=1
+                end
+            end
+        end
+        return n
+    end
+
+    cases2 = [L"\mathrm{𝖵𝖺𝗋}",
+              L"\mathrm{\alpha_𝟣}",
+              L"$\mathrm{\hat{𝗐}^𝟤_{𝟤𝟢,𝟨𝟢}}$",# (𝖯𝖺𝗎𝗅)", 
+              L"$\mathrm{\hat{𝖧}_{𝟤𝟢,𝟨𝟢}}$"]# (𝖯𝖺𝗎𝗅)"]
+    
+    gl = f[1,1] = GridLayout()
+    ax = Axis(gl[1,1],
+        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xreversed = true,
+        yreversed=true,
+        xlabel = "Event",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:4, ["Boers, 2018", "Modified significance testing\n (Step 1)", "Modified EWS calculation\n (Step 2)", "Modified data preprocessing\n(Step 3)"]),
+        #ylabel = "Method",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        )
+    
+    gr = f[1,2] = GridLayout(width=80)
+    ax2 = Axis(gr[1,1],
+        #xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xticks=[0.5],
+        xreversed = true,
+        yreversed=true,
+        #xlabel = "Transition",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:4, ["Boers, 2018", "Modified significance testing\n (Step 1)", "Modified EWS calculation\n (Step 2)", "Modified data preprocessing\n(Step 3)"]),
+        #ylabel = "Method",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        xticksvisible = false,
+        xticklabelsvisible = false,
+        yticksvisible = false,
+        yticklabelsvisible = false
+        )
+
+    
+    new_mat = zeros(2*17,2*4)
+    num_mat = zeros(2,2*4)
+    for (i,core) in enumerate([boers_paths, step1_paths, step2_paths, step3_paths])
+        for (j,path) in enumerate(core)     
+            ind = load(path)["slopes"]
+            n_h = get_n(ind,0.05)
+            t_c =  :black #:grey60
+            if n_h >= 4
+                t_f = :bold
+                f_s = 16
+                #t_c =  :grey60
+            else
+                t_f = :regular
+                f_s = 15
+                #t_c =  :black
+            end
+
+            if j==1
+                text!(ax2, 0.75,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i-1]=n_h   
+            elseif j==2
+                text!(ax2, 0.25,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i-1]=n_h
+            elseif j==3
+                text!(ax2, 0.75,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i]=n_h
+            elseif j==4
+                text!(ax2, 0.25,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i]=n_h
+            end
+            # if n_h >=4
+            #     if j==1
+            #         scatter!(ax2, [0.75],[i-0.25], strokecolor = :black, strokewidth=3, marker= :circle, markersize=20, color=:black)
+                  
+            #     elseif j==2
+            #         text!(ax2, 0.25,i-0.25, text =string(n_h),align = (:center, :center), color=:grey70)
+                 
+            #     elseif j==3
+            #         text!(ax2, 0.75,i+0.25, text = string(n_h),align = (:center, :center), color=:grey70)
+            #     elseif j==4
+            #         text!(ax2, 0.25,i+0.25, text = string(n_h),align = (:center, :center), color=:grey70)
+    
+            #     end
+            # end
+            for ev in 1:17
+      
+                if typeof(ind.slopes[ev]) != Nothing
+                    if ind.slopes[ev]>0
+                        if j==1
+                            #text!(ax, ev+0.25,i-0.25, text = L"𝖵",align = (:center, :center))
+                            new_mat[2*ev,2*i-1]+=1
+                        elseif j==2
+                            #text!(ax, ev-0.25,i-0.25, text = L"\alpha_𝟣",align = (:center, :center))
+                            new_mat[2*ev-1,2*i-1]+=1
+                        elseif j==3
+                            #text!(ax, ev+0.25,i+0.25, text = L"\hat{𝗐}^𝟤",align = (:center, :center))
+                            new_mat[2*ev,2*i]+=1
+                        elseif j==4
+                            #text!(ax, ev-0.25,i+0.25, text = L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}",align = (:center, :center))
+                            new_mat[2*ev-1,2*i]+=1
+                        end
+                        tc2 = :black
+                        fs2 = 16
+                        if ind.p_one[ev] < plim
+                            if j==1
+                                text!(ax, ev+0.25,i-0.25, text = L"\mathbf{𝖵}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i-1]+=1
+                            elseif j==2
+                                text!(ax, ev-0.25,i-0.25, text = L"\mathbf{\alpha_𝟣}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev-1,2*i-1]+=1
+                            elseif j==3
+                                text!(ax, ev+0.25,i+0.25, text = L"\mathbf{\hat{𝗐}^𝟤}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i]+=1
+                            elseif j==4
+                                text!(ax, ev-0.25,i+0.25, text = L"\mathbf{\hat{𝖧}^{\text{𝗅𝗈𝖼}}}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev-1,2*i]+=1
+                            end
+                        end
+                    end
+                end
+            end
+            
+        end
+    end
+    #t1 = cgrad(:managua, 4, categorical=true )
+    #t2 = cgrad(:roma, 4, categorical=true )
+    #t3 = cgrad(:Spectral_4, 4, categorical=true )
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.8,0.8,0.8,0.8])   
+    
+    #co2 = cgrad([:seagreen3, :dodgerblue3, :goldenrod1, :firebrick, :seagreen3, :dodgerblue3, :goldenrod1, :firebrick], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.6,0.6,0.6,0.6])#[0.1,0.1,0.1,0.1,1,1,1,1])    
+    ##co2 = cgrad([[i for i in t1]...,[i for i in t1]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.7,0.7,0.7,0.7])
+    #co2 = cgrad([t2[3],t2[4],t2[1],t2[1],t2[3],t2[4],t2[1],t2[2]],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.75,0.75,0.75,0.75])    
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.75,0.75,0.75,0.75])     
+    #co2 = cgrad([:steelblue1, :steelblue2, :steelblue3, :steelblue, :firebrick1, :firebrick2, :firebrick3, :firebrick], 8, categorical = true, alpha=[0.2,0.2,0.2,0.2,0.8,0.8,0.8,0.8])
+    # co2 = cgrad([:grey70, :grey70, :grey70, :grey70, :firebrick3, :firebrick3, :firebrick3, :firebrick3], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.8,0.8,0.8,0.8])
+    co2 = cgrad([:steelblue, :darkred, :firebrick], 3, categorical = true, alpha=[0.12,0.12,0.8])
+    hm2 = heatmap!(ax, 0.5:0.5:17.5,0.5:0.5:4.5, new_mat, colormap = co2, colorrange=extrema(new_mat))
+    #Colorbar(f[1,2],hm2)
+    translate!(hm2, 0,0,-100)
+    
+    #@show num_mat
+    n_max = Int(maximum(num_mat))
+    #@show n_max
+    co = cgrad(:amp, n_max+1, categorical = true, alpha=0.55)
+    #co = cgrad(:amp, n_max+1, categorical = true, alpha=[0.7,0.7,0.7,0.7,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9])
+    # hm_n = heatmap!(ax2, 0.5:0.5:1,0.5:0.5:4.5, num_mat, colormap = co)
+    hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:4.5, num_mat, colormap = co, colorrange=(0,n_max))
+    #hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:4.5, num_mat, colormap =Makie.Categorical(:amp),colorrange=(0,n_max))
+    Colorbar(gr[1,end+1], #hm_n,
+        colormap = co, 
+        colorrange=(0,n_max+1),
+        ticks = (0.5:1:n_max+0.5, string.(0:1:n_max)), 
+        #ticks = 0.5:1:n_max+1.5,
+        label = "No. of significant EWS (p<0.05)",
+        halign=:left)
+
+    translate!(hm_n, 0,0,-100)
+
+
+    Label(gl[1,1,TopLeft()], "(a)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    Label(gr[1,1,TopLeft()], "(b)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    elems2 = [
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        #MarkerElement(color = :black, marker = 'x', markersize = 15, points = Point2f[(0.25, 0.75)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])],
+        [MarkerElement(color = co2[1], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color =co2[2], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color = co2[3], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        ]
+    Legend(f[end+1,1], elems2, [ L"𝖵", L"\alpha_𝟣", L"\hat{𝗐}^𝟤_{𝟣𝟢,𝟧𝟢}", L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}_{𝟣𝟢,𝟧𝟢}", "decreasing", "increasing","significantly increasing (p<$(plim))"],
+                "EWS indicators",
+                titleposition=:top,
+                #titlefont=:regular,
+                #titlegap=15,
+                rowgap = 15, 
+                framevisible = false, #false,
+                framecolor = :grey70,
+                tellwidth = false,
+                tellheight=true,
+                orientation = :horizontal,
+                patchsize=(30,40),
+                patchlabelgap=10,
+                )
+    
+    colgap!(f.layout,20)
+    if showing
+        display(f)
+    end
+    if saving
+        save(saveto, f)
+    end
+    
+end
+
+
+aggregated_plot2_method(lowpass = true, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_method_lp.pdf")
+aggregated_plot2_method(lowpass = false, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_method_no_lp.pdf")
+
+
+function aggregated_plot2_irreg(;lowpass= lowpass, showing = true, saving = false, saveto = "paper/result_overview_method_lowpass_$(lowpass)_smoothw_false_p_0.05.pdf")
+    #cases = [L"\textbf{\mathrm{\sigma^𝟤}}",L"\mathrm{\alpha_𝟣}", L"$\mathrm{\hat{𝗐}^𝟤}$, 𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅", L"$\mathrm{\hat{𝖧}_{𝟤𝟢-𝟨𝟢 𝗒, 𝖯𝖺𝗎𝗅}}$"]
+    
+    irreg_paths = ["new_surrogate_files/NGRIP_irreg/var_filt_1000_tfts.jld2",
+                    "new_surrogate_files/NGRIP_irreg/ac_filt_1000_tfts.jld2",
+                    "new_surrogate_files/NGRIP_irreg/sca_10_50_1000_tfts.jld2",
+                    "new_surrogate_files/NGRIP_irreg/hurst_10_50_1000_tfts.jld2"]
+    
+    morlet_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                     "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                     "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+                    
+    paul_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                    "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                     "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                     "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+   #irregular_paths = []
+
+    
+    #Morlet_paths = []
+
+    if lowpass == false
+       
+        paul_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+        morlet_paths = ["new_surrogate_files/NGRIP5/var/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/ac/w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_no_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2",
+                        "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_no_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"]
+
+        #irregular_paths = []
+
+
+        #Morlet_paths = []
+    end
+
+    
+    f= Figure(size=(1200,450))
+
+    function get_n(x,plim)
+        n=0
+        for ev in 1:17
+            if typeof(x.slopes[ev]) != Nothing
+                if x.slopes[ev] >0  && x.p_one[ev] < plim
+                    n+=1
+                end
+            end
+        end
+        return n
+    end
+
+    cases2 = [L"\mathrm{𝖵𝖺𝗋}",
+              L"\mathrm{\alpha_𝟣}",
+              L"$\mathrm{\hat{𝗐}^𝟤_{𝟤𝟢,𝟨𝟢}}$",# (𝖯𝖺𝗎𝗅)", 
+              L"$\mathrm{\hat{𝖧}_{𝟤𝟢,𝟨𝟢}}$"]# (𝖯𝖺𝗎𝗅)"]
+    
+    gl = f[1,1] = GridLayout()
+    ax = Axis(gl[1,1],
+        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xreversed = true,
+        yreversed=true,
+        xlabel = "Event",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:3, ["irregular\n (Morlet)", "5 years\n (Morlet)", "5 years\n (Paul)"]),
+        ylabel = "Temporal reolution\n (wavelet basis)",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        )
+    
+    gr = f[1,2] = GridLayout(width=80)
+    ax2 = Axis(gr[1,1],
+        #xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+        xticks=[0.5],
+        xreversed = true,
+        yreversed=true,
+        #xlabel = "Transition",
+        xminorgridwidth = 3.5,
+        xgridwidth=0.7,
+        xminorgridcolor = :grey10 ,
+        xgridcolor=:grey30,
+        xminorgridvisible = true, 
+        xgridvisible = true,
+        yticks = (1:3, ["irregular\n (Morlet)", "5 years\n (Morlet)", "5 years\n (Paul)"]),
+        #ylabel = "Method",
+        yminorgridwidth = 4.5,
+        ygridwidth=0.7,
+        yminorgridcolor = :grey10 ,
+        ygridcolor=:grey30,
+        yminorgridvisible = true, 
+        ygridvisible = true,
+        xticksvisible = false,
+        xticklabelsvisible = false,
+        yticksvisible = false,
+        yticklabelsvisible = false
+        )
+
+    
+    new_mat = zeros(2*17,2*3)
+    num_mat = zeros(2,2*3)
+    for (i,core) in enumerate([irreg_paths, morlet_paths, paul_paths])
+        for (j,path) in enumerate(core)     
+            ind = load(path)["slopes"]
+            n_h = get_n(ind,0.05)
+            t_c =  :black #:grey60
+            if n_h >= 4
+                t_f = :bold
+                f_s = 16
+                #t_c =  :grey60
+            else
+                t_f = :regular
+                f_s = 15
+                #t_c =  :black
+            end
+
+            if j==1
+                text!(ax2, 0.75,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i-1]=n_h   
+            elseif j==2
+                text!(ax2, 0.25,i-0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i-1]=n_h
+            elseif j==3
+                text!(ax2, 0.75,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[2,2*i]=n_h
+            elseif j==4
+                text!(ax2, 0.25,i+0.25, text = "$n_h",align = (:center, :center), color=t_c, font = t_f, fontsize = f_s)
+                num_mat[1,2*i]=n_h
+            end
+            # if n_h >=4
+            #     if j==1
+            #         scatter!(ax2, [0.75],[i-0.25], strokecolor = :black, strokewidth=3, marker= :circle, markersize=20, color=:black)
+                  
+            #     elseif j==2
+            #         text!(ax2, 0.25,i-0.25, text =string(n_h),align = (:center, :center), color=:grey70)
+                 
+            #     elseif j==3
+            #         text!(ax2, 0.75,i+0.25, text = string(n_h),align = (:center, :center), color=:grey70)
+            #     elseif j==4
+            #         text!(ax2, 0.25,i+0.25, text = string(n_h),align = (:center, :center), color=:grey70)
+    
+            #     end
+            # end
+            for ev in 1:17
+                # if j==1
+                #     new_mat[2*ev,2*i-1]=1
+                # elseif j==2
+                #     new_mat[2*ev-1,2*i-1]=2
+                # elseif j==3
+                #     new_mat[2*ev,2*i]=3
+                # elseif j==4
+                #     new_mat[2*ev-1,2*i]=4
+                # end
+                if typeof(ind.slopes[ev]) != Nothing
+                    if ind.slopes[ev]>0
+                        if j==1
+                            #text!(ax, ev+0.25,i-0.25, text = L"𝖵",align = (:center, :center))
+                            new_mat[2*ev,2*i-1]+=1
+                        elseif j==2
+                            #text!(ax, ev-0.25,i-0.25, text = L"\alpha_𝟣",align = (:center, :center))
+                            new_mat[2*ev-1,2*i-1]+=1
+                        elseif j==3
+                            #text!(ax, ev+0.25,i+0.25, text = L"\hat{𝗐}^𝟤",align = (:center, :center))
+                            new_mat[2*ev,2*i]+=1
+                        elseif j==4
+                            #text!(ax, ev-0.25,i+0.25, text = L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}",align = (:center, :center))
+                            new_mat[2*ev-1,2*i]+=1
+                        end
+                        tc2 = :black
+                        fs2 = 16
+                        if ind.p_one[ev] < plim
+                            if j==1
+                                text!(ax, ev+0.25,i-0.25, text = L"\mathbf{𝖵}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i-1]+=1
+                            elseif j==2
+                                if i == 1 
+                                    text!(ax, ev-0.25,i-0.25, text = L"\mathbf{\hat{\alpha}_𝟣}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                else
+                                    text!(ax, ev-0.25,i-0.25, text = L"\mathbf{\alpha_𝟣}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                end
+                                new_mat[2*ev-1,2*i-1]+=1
+                            elseif j==3
+                                text!(ax, ev+0.25,i+0.25, text = L"\mathbf{\hat{𝗐}^𝟤}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev,2*i]+=1
+                            elseif j==4
+                                text!(ax, ev-0.25,i+0.25, text = L"\mathbf{\hat{𝖧}^{\text{𝗅𝗈𝖼}}}",align = (:center, :center), color=tc2, fontsize = fs2)
+                                new_mat[2*ev-1,2*i]+=1
+                            end
+                        end
+                    end
+                end
+            end
+            
+        end
+    end
+    #t1 = cgrad(:managua, 4, categorical=true )
+    #t2 = cgrad(:roma, 4, categorical=true )
+    #t3 = cgrad(:Spectral_4, 4, categorical=true )
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.8,0.8,0.8,0.8])   
+    
+    #co2 = cgrad([:seagreen3, :dodgerblue3, :goldenrod1, :firebrick, :seagreen3, :dodgerblue3, :goldenrod1, :firebrick], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.6,0.6,0.6,0.6])#[0.1,0.1,0.1,0.1,1,1,1,1])    
+    ##co2 = cgrad([[i for i in t1]...,[i for i in t1]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.7,0.7,0.7,0.7])
+    #co2 = cgrad([t2[3],t2[4],t2[1],t2[1],t2[3],t2[4],t2[1],t2[2]],8, categorical=true, alpha=[0.08,0.08,0.08,0.08,0.75,0.75,0.75,0.75])    
+    #co2 = cgrad([[i for i in t3]...,[i for i in t3]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,0.75,0.75,0.75,0.75])     
+    #co2 = cgrad([:steelblue1, :steelblue2, :steelblue3, :steelblue, :firebrick1, :firebrick2, :firebrick3, :firebrick], 8, categorical = true, alpha=[0.2,0.2,0.2,0.2,0.8,0.8,0.8,0.8])
+    # co2 = cgrad([:grey70, :grey70, :grey70, :grey70, :firebrick3, :firebrick3, :firebrick3, :firebrick3], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,0.8,0.8,0.8,0.8])
+    co2 = cgrad([:steelblue, :darkred, :firebrick], 3, categorical = true, alpha=[0.12,0.12,0.8])
+    hm2 = heatmap!(ax, 0.5:0.5:17.5,0.5:0.5:3.5, new_mat, colormap = co2, colorrange=extrema(new_mat))
+    #Colorbar(f[1,2],hm2)
+    translate!(hm2, 0,0,-100)
+    
+    #@show num_mat
+    n_max = Int(maximum(num_mat))
+    #@show n_max
+    co = cgrad(:amp, n_max+1, categorical = true, alpha=0.55)
+    # if lowpass
+    #     co = cgrad(:amp, n_max+1, categorical = true, alpha=[0.7,0.7,0.7,0.7,0.9,0.9])
+    # else
+    #     co = cgrad(:amp, n_max+1, categorical = true, alpha=[0.7,0.7,0.7,0.7,0.9])
+    # end
+    # hm_n = heatmap!(ax2, 0.5:0.5:1,0.5:0.5:4.5, num_mat, colormap = co)
+    hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:3.5, num_mat, colormap = co, colorrange=(0,n_max))
+    #hm_n = heatmap!(ax2, 0:0.5:1,0.5:0.5:4.5, num_mat, colormap =Makie.Categorical(:amp),colorrange=(0,n_max))
+    Colorbar(gr[1,end+1], #hm_n,
+        colormap = co, 
+        colorrange=(0,n_max+1),
+        ticks = (0.5:1:n_max+0.5, string.(0:1:n_max)), 
+        #ticks = 0.5:1:n_max+1.5,
+        label = "No. of significant EWS (p<0.05)",
+        halign=:left)
+
+    translate!(hm_n, 0,0,-100)
+
+
+    Label(gl[1,1,TopLeft()], "(a)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    Label(gr[1,1,TopLeft()], "(b)", fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left,valign =:bottom)
+    elems2 = [
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        #MarkerElement(color = :black, marker = 'x', markersize = 15, points = Point2f[(0.25, 0.75)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])
+        ],
+        [PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 0.5), (0.5, 0.5), (0.5, 0),(0,0)]),
+        PolyElement(color = :grey20, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 0.5), (1, 0.5), (1, 0),(0.5,0)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0, 1), (0.5, 1), (0.5, 0.5),(0,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey30, strokewidth = 1, points = Point2f[(0.5, 1), (1, 1), (1, 0.5),(0.5,0.5)]),
+        PolyElement(color = :transparent, strokecolor = :grey10, strokewidth = 2, points = Point2f[(0, 1), (1, 1), (1, 0),(0,0)])],
+        [MarkerElement(color = co2[1], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color =co2[2], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        [MarkerElement(color = co2[3], marker = :rect, markersize = 25,
+        strokecolor = :grey, strokewidth = 0.7)],
+        ]
+    Legend(f[end+1,1], elems2, [ L"𝖵", L"\alpha_𝟣", L"\hat{𝗐}^𝟤_{𝟣𝟢,𝟧𝟢}", L"\hat{𝖧}^{\text{𝗅𝗈𝖼}}_{𝟣𝟢,𝟧𝟢}", "decreasing", "increasing","significantly increasing (p<$(plim))"],
+                "EWS indicators",
+                titleposition=:top,
+                #titlefont=:regular,
+                #titlegap=15,
+                rowgap = 15, 
+                framevisible = false, #false,
+                framecolor = :grey70,
+                tellwidth = false,
+                tellheight=true,
+                orientation = :horizontal,
+                patchsize=(30,40),
+                patchlabelgap=10,
+                )
+    
+    colgap!(f.layout,20)
+    if showing
+        display(f)
+    end
+    if saving
+        save(saveto, f)
+    end
+    
+end
+
+aggregated_plot2_irreg(lowpass = true, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_irreg_lp.pdf")
+aggregated_plot2_irreg(lowpass = false, saving=true, saveto="do_ews_across_greenland_ice_cores/figures/aggregated_overview2_incl_n_irreg_no_lp.pdf")
+
+# elems2 = [[MarkerElement(color = t1[ci], marker = :rect, markersize = 25,
+#                 strokecolor = :grey, strokewidth = 0.7)] for ci = 1:2]
+# cgrad([:seagreen3, :darkcyan, :goldenrod1, :firebrick, :seagreen3, :darkcyan, :goldenrod1, :firebrick], 8, categorical = true, alpha=[0.1,0.1,0.1,0.1,1,1,1,1])
+# t1 = cgrad(:managua, 4, categorical=true )
+# t2 = cgrad(:roma, 4, categorical=true )
+# t3 = cgrad(:Spectral_4, 4, categorical=true )
+# t3
+# cgrad(:balance, 4, categorical=true )
+# cgrad([[i for i in t1]...,[i for i in t1]...],8, categorical=true, alpha=[0.1,0.1,0.1,0.1,1,1,1,1])
+# cgrad(:davos, 4, categorical=true )
+
+# cgrad([:steelblue1, :steelblue2, :steelblue3, :steelblue, :firebrick1, :firebrick2, :firebrick3, :firebrick], 8, categorical = true, alpha=[0.2,0.2,0.2,0.2,1,1,1,1])
+
+1049-976
+#################################
+###########################
 
 function load_data(type)
     ice_core_paths = readdir("new_surrogate_files/ice_cores/$(type)/", join = true)
@@ -914,10 +2066,10 @@ function plot_num_incr_wavelet_own_scales2(sig_incr_matr_sca_one,sig_incr_matr_h
             ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤}}"
         elseif j == 2
             sig_incr_matr = sig_incr_matr_hurst_one
-            ind_n =L"\textbf{\mathrm{\hat{𝖧}}}"
+            ind_n =L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         elseif j == 3
             sig_incr_matr = sig_incr_matr_wave_both_one
-            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
         whichletter = 1
         for i = 1:3
@@ -1012,10 +2164,10 @@ function plot_num_incr_wavelet_20_scales(sig_incr_matr_sca_one,sig_incr_matr_hur
             ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤}}"
         elseif j == 2
             sig_incr_matr = sig_incr_matr_hurst_one
-            ind_n = L"\textbf{\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         elseif j == 3
             sig_incr_matr = sig_incr_matr_wave_both_one
-            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
         whichletter = 1
         for i = 1:3
@@ -1126,11 +2278,11 @@ function plot_increases_wavelet_own_scales_split(incr_matrix_sca, sig_incr_matr_
             elseif j == 2
                 incr_ma = incr_matrix_hurst
                 sig_incr_matr = sig_incr_matr_hurst_one
-                ind_n = L"\textbf{\mathrm{\hat{𝖧}}}" 
+                ind_n = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}" 
             elseif j == 3
                 incr_ma = incr_matrix_wave_both
                 sig_incr_matr = sig_incr_matr_wave_both_one
-                ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}}"
+                ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}^\text{𝗅𝗈𝖼}}"
             end
 
             whichletter = 1
@@ -1144,7 +2296,7 @@ function plot_increases_wavelet_own_scales_split(incr_matrix_sca, sig_incr_matr_
                             xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
                             xticklabelrotation=pi/3,
                             xreversed = true,
-                            xlabel = "Transition",
+                            xlabel = "Event",
                             yticksvisible = false,
                             xminorgridwidth = 1.0, 
                             xminorgridcolor = :grey30 ,
@@ -1232,11 +2384,11 @@ function plot_increases_wavelet_20_scales2(incr_matrix_sca, sig_incr_matr_sca_on
         elseif j == 2
             incr_ma = incr_matrix_hurst
             sig_incr_matr = sig_incr_matr_hurst_one
-            ind_n = L"\textbf{\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         elseif j == 3
             incr_ma = incr_matrix_wave_both
             sig_incr_matr = sig_incr_matr_wave_both_one
-            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
 
         whichletter = 1
@@ -1251,7 +2403,7 @@ function plot_increases_wavelet_20_scales2(incr_matrix_sca, sig_incr_matr_sca_on
                             xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
                             xticklabelrotation=pi/3,
                             xreversed = true,
-                            xlabel = "Transition",
+                            xlabel = "Event",
                             yticksvisible = false,
                             xminorgridwidth = 1.0, 
                             xminorgridcolor = :grey30 ,
@@ -1331,10 +2483,10 @@ function plot_common_increases_wavelet(sig_incr_matr_sca_one,sig_incr_matr_hurst
             ind_n =L"\textbf{\mathrm{\hat{𝗐}^𝟤}}" 
         elseif j == 2
             sig_incr_matr = sig_incr_matr_hurst_one
-            ind_n = L"\textbf{\mathrm{\hat{𝖧}}}" 
+            ind_n = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}" 
         elseif j == 3
             sig_incr_matr = sig_incr_matr_wave_both_one
-            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}}}"
+            ind_n = L"\textbf{\mathrm{\hat{𝗐}^𝟤} \text{𝖺𝗇𝖽 }\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
 
         for l = 1:3
@@ -1353,7 +2505,7 @@ function plot_common_increases_wavelet(sig_incr_matr_sca_one,sig_incr_matr_hurst
                             xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
                             xticklabelrotation=pi/3,
                             xreversed = true,
-                            xlabel = "Transition",
+                            xlabel = "Event",
                             yticksvisible = false,
                             xminorgridwidth = 1.0, 
                             xminorgridcolor = :grey30 ,
@@ -1485,13 +2637,13 @@ function plot_common_increases_csd(sig_incr_matr_var_one, sig_incr_matr_ac_one,s
     for j = 1:3
         if j ==1
             sig_incr_matr = sig_incr_matr_var_one
-            ind_n = L"\textbf{\mathrm{\sigma^𝟤}}"
+            ind_n = L"\textbf{\mathrm{𝖵}}"
         elseif j == 2
             sig_incr_matr = sig_incr_matr_ac_one
             ind_n = L"\textbf{\mathrm{\alpha_𝟣}}"
         elseif j == 3
             sig_incr_matr = sig_incr_matr_both_one
-            ind_n = L"\textbf{\mathrm{\sigma^𝟤} \text{𝖺𝗇𝖽 } \mathrm{\alpha_𝟣}}"
+            ind_n = L"\textbf{\mathrm{𝖵} \text{𝖺𝗇𝖽 } \mathrm{\alpha_𝟣}}"
         end
         for l in 1:3
             replace!(sig_incr_matr[l], missing =>0)
@@ -1555,7 +2707,7 @@ function plot_common_increases_csd(sig_incr_matr_var_one, sig_incr_matr_ac_one,s
                 hm = heatmap!(ax, commons, colormap = co5, colorrange=(0,4))
                 translate!(hm, 0,0,-100)
             end
-            ax.xlabel = "Transition"
+            ax.xlabel = "Event"
             rowsize!(ff.layout, i, Relative(1/3))
             Label(ga[1,1,TopLeft()], letters_h[j,whichletter], fontsize = 20,
                 font = :bold, padding = (0,5,5,0),
@@ -1617,7 +2769,7 @@ function plot_common_increases_csd(sig_incr_matr_var_one, sig_incr_matr_ac_one,s
 end
 
 
- 
+saving = true
 for lowpass in [true, false]
     smoothw=false
     #@show lowpass, smoothw
@@ -1644,22 +2796,22 @@ for lowpass in [true, false]
 
     if lowpass
         plot_num_incr_wavelet_own_scales2(sig_incr_matr_sca_one,sig_incr_matr_hurst_one,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figA5.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figA5.pdf")
         plot_num_incr_wavelet_20_scales(sig_incr_matr_sca_one,sig_incr_matr_hurst_one,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figS10.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS10.pdf")
         plot_increases_wavelet_own_scales_split(incr_matrix_sca, sig_incr_matr_sca_one,incr_matrix_hurst,sig_incr_matr_hurst_one,incr_matrix_wave_both,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figS8_S9.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS8_S9.pdf")
         plot_increases_wavelet_20_scales2(incr_matrix_sca, sig_incr_matr_sca_one,incr_matrix_hurst,sig_incr_matr_hurst_one,incr_matrix_wave_both,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figA4.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figA4.pdf")
         plot_common_increases_wavelet(sig_incr_matr_sca_one,sig_incr_matr_hurst_one,sig_incr_matr_wave_both_one,
-            scaleranges;showing = showing, saving = saving, saveto = "figures/figS11.pdf")
+            scaleranges;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS11.pdf")
         plot_common_increases_csd(sig_incr_matr_var_one, sig_incr_matr_ac_one,sig_incr_matr_both_one; 
-            showing = showing, saving = saving, saveto = "figures/figS7.pdf")
+            showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS7.pdf")
     else
         plot_num_incr_wavelet_own_scales2(sig_incr_matr_sca_one,sig_incr_matr_hurst_one,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figS23.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS23.pdf")
         plot_increases_wavelet_20_scales2(incr_matrix_sca, sig_incr_matr_sca_one,incr_matrix_hurst,sig_incr_matr_hurst_one,incr_matrix_wave_both,sig_incr_matr_wave_both_one,
-            scaleranges, ylabs;showing = showing, saving = saving, saveto = "figures/figS22.pdf")
+            scaleranges, ylabs;showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS22.pdf")
     end
 end
 
@@ -1709,7 +2861,7 @@ function plot_all_csd_ts2_label(ylabs;lowpass = lowpass, plim = plim, showing = 
                 if k == 1
                     axv = Axis(gl[1,1], 
                             xlabel = "Age (kyr b2k)", 
-                            ylabel = L"\mathrm{\sigma^𝟤}", 
+                            ylabel = L"\mathrm{𝖵}", 
                             ylabelsize = 18,
                             ylabelfont = :bold,
                             xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -1841,9 +2993,9 @@ function plot_all_csd_ts2_label(ylabs;lowpass = lowpass, plim = plim, showing = 
                             halign = :left, valign =:bottom)
             end
             if i == 1
-                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
+                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
             else
-                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,12.0), valign = :center, font=:bold,fontsize = 20)
+                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,12.0), valign = :center, font=:bold,fontsize = 20)
             end
         end
     end
@@ -1874,9 +3026,259 @@ function plot_all_csd_ts2_label(ylabs;lowpass = lowpass, plim = plim, showing = 
     end
 end
 
-plot_all_csd_ts2_label(ylabs2,lowpass = true, plim = plim, showing = showing, saving = saving, legend = true, saveto = "figures/fig6.pdf")
-plot_all_csd_ts2_label(ylabs2,lowpass = false, plim = plim, showing = showing, saving = saving, legend = true,  saveto = "figures/figS17.pdf")
+plot_all_csd_ts2_label(ylabs2,lowpass = true, plim = plim, showing = showing, saving = saving, legend = true, saveto = "do_ews_across_greenland_ice_cores/figures/fig6.pdf")
+plot_all_csd_ts2_label(ylabs2,lowpass = false, plim = plim, showing = showing, saving = saving, legend = true,  saveto = "do_ews_across_greenland_ice_cores/figures/figS17.pdf")
 
+
+## again, but aggregated 
+function plot_all_csd_ts2_label_aggr(ylabs;lowpass = lowpass, plim = plim, showing = true, saving = false, legend = false, saveto = "paper/all_csd_ts2_label_lowpass_$(lowpass)_p_$(plim).pdf")
+    f_csd_ts = Figure(size=(1200,1250))
+    letters_h = reshape(letters[1:18],2,9)
+    
+    whichletter = 0
+
+    function good_csd_files(v,type,lowpass)
+        if type == "NGRIP5"
+            if lowpass
+                return occursin("w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",v) && !occursin("NIKLAS_", v)
+            else
+                return  occursin("w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2",v) && !occursin("NIKLAS_", v)
+            end
+        elseif type == "10y"
+            if lowpass
+                return occursin("w_200_normed_filt", v) && occursin("lp_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2", v)
+            else
+                return occursin("w_200_normed_filt", v) && occursin("gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2", v) && !occursin("_lp_", v)
+            end
+        elseif type == "20y"
+            return occursin("w_200_normed_filt", v) && occursin("gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2", v)
+        end
+    end
+
+    for (it,type) in enumerate(["NGRIP5", "10y", "20y"])
+        ice_cores, var_names, vars, ac_names, acs, sca_names, scas, hurst_names, hursts, sranges = load_data(type)
+
+        good = @. good_csd_files(var_names,type,lowpass)
+        
+        for (i,(v,a)) in enumerate(zip(reverse(vars[good]), reverse(acs[good])))
+            whichletter +=1
+            n_v = 0 
+            n_a = 0
+            n_both = 0
+            which_v = []
+            for k = 1:2
+                gl = f_csd_ts[whichletter,k] = GridLayout()
+                
+                
+
+                if k == 1
+                    ax = Axis(gl[1,1],
+                        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                        xreversed = true,
+                        xticklabelrotation = pi*0.4,
+                        #yreversed=true,
+                        ylabel =  L"\mathrm{𝖵}",
+                        #xlabel = "Transition",
+                        xminorgridwidth = 1,
+                        xgridwidth=0,
+                        xminorgridcolor = :grey10 ,
+                        xgridcolor=:transparent,
+                        xminorgridvisible = true, 
+                        xgridvisible = false,
+                        #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                        #ylabel = "Ice core",
+                        #yminorgridwidth = 1,
+                        #ygridwidth=0.7,
+                        #yminorgridcolor = :grey10 ,
+                        #ygridcolor=:grey30,
+                        yminorgridvisible = false, 
+                        ygridvisible = false,
+                        yticksvisible=false,
+                        yticklabelsvisible=false,
+                        ylabelsize = 18,
+                        ylabelfont = :bold,
+                        )
+
+                    if whichletter ∈ [1,3,6]
+                        ax.xlabel = "Event"
+                    else
+                        hidexdecorations!(ax, grid=false, minorgrid=false)
+                        hidespines!(ax, :b) 
+                    end
+
+                    if i>1
+                        hidespines!(ax,:t)
+                        #hidexdecorations!(ax_event, grid=false)
+                    end
+
+                    ma = zeros(17,1)
+                    for ev in 1:17
+                        #va = 0.4
+                        #vl = 2.0
+                        #vsc = (:white,1.0)
+                        #vc = :black
+                        if typeof(v.slopes[ev]) != Nothing
+                            if v.slopes[ev] >0 
+                                ma[ev,1]+=1
+                        #        vc = :red
+                        #        vsc = (:darkred,0.1)
+                                if v.p_one[ev] < plim
+                                    ma[ev,1]+=1
+                        #            va = 0.9
+                        #            vl = 3.5
+                        #            vsc = (:darkred,0.8)
+                                    n_v +=1
+                                    push!(which_v, ev)
+                                end
+                            
+                            else
+                        #        vc = :blue
+                        #        vsc = (:steelblue,0.1)
+                            end
+                        end
+                        # vspan!(axv, [GI_onsets[ev]], [GS_onsets[ev]], color = vsc)
+                        # pv = Polynomials.fit(v.times[ev][findall(!ismissing, v.vals[ev])], convert.(Float64,v.vals[ev][findall(!ismissing, v.vals[ev])]),1)
+                        # lines!(axv,v.times[ev], v.vals[ev], color = :black, alpha = va)#, linewidth = vl)
+                        # lines!(axv, v.times[ev], pv.(v.times[ev]), color = vc, alpha = va, linewidth = vl)
+                        # vlines!(axv, [GI_onsets[ev]], color = :darkred, alpha = va, linewidth = vl)
+                    end
+                    co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                    hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                    # xlims!(axv,nothing,nothing)
+                    # axv.xreversed = true
+                    # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+                elseif k == 2
+                    ax = Axis(gl[1,1],
+                        xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                        xreversed = true,
+                        xticklabelrotation = pi*0.4,
+                        #yreversed=true,
+                        ylabel =  L"\mathrm{\alpha_𝟣}",
+                        #xlabel = "Transition",
+                        xminorgridwidth = 1,
+                        xgridwidth=0,
+                        xminorgridcolor = :grey10 ,
+                        xgridcolor=:transparent,
+                        xminorgridvisible = true, 
+                        xgridvisible = false,
+                        #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                        #ylabel = "Ice core",
+                        yminorgridwidth = 1,
+                        ygridwidth=0.7,
+                        yminorgridcolor = :grey10 ,
+                        ygridcolor=:grey30,
+                        yminorgridvisible = false, 
+                        ygridvisible = false,
+                        yticksvisible=false,
+                        yticklabelsvisible=false,
+                        ylabelsize = 18,
+                        ylabelfont = :bold,
+                        )
+
+                    if whichletter ∈ [1,3,6]
+                        ax.xlabel = "Event"
+                    else
+                        hidexdecorations!(ax, grid=false, minorgrid=false)
+                        hidespines!(ax, :b) 
+                    end
+                    #hidedecorations!(ax, label=true)
+
+                    if i>1
+                        hidespines!(ax,:t)
+                        #hidexdecorations!(ax_event, grid=false)
+                    end
+
+                    ma = zeros(17,1)
+                    
+                    for ev in 1:17
+                        #aa = 0.4
+                        #al = 2.0
+                        #asc = (:white,1.0)
+                        #ac = :black
+                        if typeof(a.slopes[ev]) != Nothing
+                            if a.slopes[ev] >0 
+                                #ac = :red
+                                #asc = (:darkred,0.1)
+                                ma[ev,1]+=1
+                                if a.p_one[ev] < plim
+                                    ma[ev,1]+=1
+                                    #aa = 0.9
+                                    #al = 3.5
+                                    #asc = (:darkred,0.8)
+                                    n_a +=1
+                                    if ev in which_v
+                                        n_both +=1
+                                    end
+                                end
+                            
+                            #else
+                            #    ac = :blue
+                            #    asc = (:steelblue,0.1)
+                            end
+                        end
+                        # vspan!(axa, [GI_onsets[ev]], [GS_onsets[ev]], color = asc)
+                        # pa = Polynomials.fit(a.times[ev][findall(!ismissing, a.vals[ev])], convert.(Float64,a.vals[ev][findall(!ismissing, a.vals[ev])]),1)
+                        # lines!(axa,a.times[ev], a.vals[ev], color = :black, alpha = aa)#, linewidth = vl)
+                        # lines!(axa, a.times[ev], pa.(a.times[ev]), color = ac, alpha = aa, linewidth = al)
+                        # vlines!(axa, [GI_onsets[ev]], color = :darkred, alpha = aa, linewidth = al)
+
+                    end
+                    co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                    hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                    #ax.xlabel = "Transition"
+                    #xlims!(axa,nothing,nothing)
+                    #axa.xreversed = true
+                    #xlims!(ax_event, axa.xaxis.attributes.limits[]...)
+                    #ax_event.xreversed = true
+                end
+
+
+                Label(gl[1,1,TopLeft()], letters_h[k,whichletter], fontsize = 20,
+                            font = :bold, padding = (0,20,-10,15),
+                            halign = :left, valign =:bottom)
+            end
+            if i == 1
+                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,0.0,30.0), valign = :center, font=:bold,fontsize = 20)
+            else
+                Label(f_csd_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,12.0), valign = :center, font=:bold,fontsize = 20)
+            end
+        end
+    end
+
+    Label(f_csd_ts[1,1:end,Top()], "EWS in 100-year high-pass filtered records with 5-year resolution", padding = (0.0,0.0,60.0,25.0), valign = :bottom, font = :bold, fontsize = 20)
+    Label(f_csd_ts[2,1:end,Top()], "EWS in 100-year high-pass filtered records with 10-year resolution", padding = (0.0,0.0,60.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
+    Label(f_csd_ts[4,1:end,Top()], "EWS in 100-year high-pass filtered records with 20-year resolution", padding = (0.0,0.0,60.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
+    
+    if legend
+        # elems = [
+        #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+        #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+        #     ]
+        # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        elems = [
+            [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            ]
+        labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        Legend(f_csd_ts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+    end
+
+    colgap!(f_csd_ts.layout, 20)
+    rowgap!(f_csd_ts.layout, 0)
+
+    if saving
+        save(saveto,f_csd_ts)
+    end
+    if showing
+        display(f_csd_ts)
+    end
+end
+
+plot_all_csd_ts2_label_aggr(ylabs2,lowpass = true, plim = plim, showing = showing, saving = saving, legend = true, saveto = "do_ews_across_greenland_ice_cores/figures/fig6_aggr.pdf")
+plot_all_csd_ts2_label_aggr(ylabs2,lowpass = false, plim = plim, showing = showing, saving = saving, legend = true,  saveto = "do_ews_across_greenland_ice_cores/figures/figS17_aggr.pdf")
 
 #Fig 9 and S21
 function plot_all_wave_ts2_label(;lowpass = lowpass, 
@@ -1990,7 +3392,7 @@ function plot_all_wave_ts2_label(;lowpass = lowpass,
                         ax_event.xreversed = true
                     elseif k == 2
                         axa = Axis(gl[1,1], 
-                            ylabel =  L"\mathrm{\hat{𝖧}}",
+                            ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}",
                             ylabelsize = 18,
                             ylabelfont = :bold,
                             xticks = (10_000:5_000:60_000, string.(10:5:60)),
@@ -2056,9 +3458,9 @@ function plot_all_wave_ts2_label(;lowpass = lowpass,
                         halign = :left,valign =:bottom)
                 end
                 if i == 1
-                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
+                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
                 else
-                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,10.0), valign = :center, font=:bold,fontsize = 20)
+                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,10.0), valign = :center, font=:bold,fontsize = 20)
                 end
             end
         end
@@ -2093,11 +3495,264 @@ end
 
 
 plot_all_wave_ts2_label(lowpass = true, smoothw = false, plim = plim, scales = [(20,60)],showing = showing,saving = saving,legend = true,
-                savetos = ["figures/fig9.pdf"])
+                savetos = ["do_ews_across_greenland_ice_cores/figures/fig9.pdf"])
 plot_all_wave_ts2_label(lowpass = false, smoothw = false, plim = plim, scales = [(20,60)],showing = showing,saving = saving,legend = true,
-                savetos = ["figures/figS21.pdf"])
+                savetos = ["do_ews_across_greenland_ice_cores/figures/figS21.pdf"])
+
+function plot_all_wave_ts2_label_aggr(;lowpass = lowpass, smoothw = smoothw, plim = plim, scales = [(20,60),(20,100)], showing = true, saving = false, legend = false, savetos = ["paper/all_wave_ts2_label_20_60_lowpass_$(lowpass)_smoothw_$(smoothw)_p_$(plim).pdf",
+    "paper/all_wave_ts2_label_20_100_lowpass_$(lowpass)_smoothw_$(smoothw)_p_$(plim).pdf"] )
+    
+    function good_wavelet_files(v,type,lowpass, smoothw,s1,s2)
+        if type == "NGRIP5"
+            if lowpass
+                return occursin("s1_$(s1)_s2_$(s2)_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_$(smoothw)_10000_TFTS.jld2",v) && !occursin("NIKLAS_", v)
+            else
+                return occursin("s1_$(s1)_s2_$(s2)_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_$(smoothw)_10000_TFTS.jld2",v) && !occursin("NIKLAS_", v)
+            end
+        elseif type == "10y"
+            if lowpass
+                return occursin("s1_$(s1)_s2_$(s2)", v) && occursin("_lp_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_$(smoothw)_10000_TFTS.jld2", v)
+            else
+                return occursin("s1_$(s1)_s2_$(s2)", v) && occursin("PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_$(smoothw)_10000_TFTS.jld2", v) && !occursin("_lp_", v)
+            end
+        elseif type == "20y"
+            return occursin("s1_$(s1)_s2_$(s2)", v) && occursin("PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_$(smoothw)_10000_TFTS.jld2", v)
+        end
+    end
+
+    for (snum,(s1,s2)) in enumerate(scales)
+        f_wave_ts = Figure(size=(1200,1250))
+        letters_h = reshape(letters[1:18],2,9)
+        
+        whichletter = 0
 
 
+        for (it,type) in enumerate(["NGRIP5", "10y", "20y"])
+            ice_cores, var_names, vars, ac_names, acs, sca_names, scas, hurst_names, hursts, sranges = load_data(type)
+
+            goods = @. good_wavelet_files(sca_names,type,lowpass, smoothw,s1,s2)
+            goodh = @. good_wavelet_files(hurst_names,type,lowpass, smoothw,s1,s2)
+            
+            for (i,(v,a)) in enumerate(zip(reverse(scas[goods]), reverse(hursts[goodh])))
+                whichletter +=1
+                n_v = 0 
+                n_a = 0
+                n_both = 0
+                which_v = []
+                for k = 1:2
+                    gl = f_wave_ts[whichletter,k] = GridLayout()
+        
+                    if k == 1
+                        ax = Axis(gl[1,1],
+                            xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                            xreversed = true,
+                            xticklabelrotation = pi*0.4,
+                            #yreversed=true,
+                            ylabel =  L"\mathrm{\hat{𝗐}^𝟤}",
+                            #xlabel = "Transition",
+                            xminorgridwidth = 1,
+                            xgridwidth=0,
+                            xminorgridcolor = :grey10 ,
+                            xgridcolor=:transparent,
+                            xminorgridvisible = true, 
+                            xgridvisible = false,
+                            #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                            #ylabel = "Ice core",
+                            #yminorgridwidth = 1,
+                            #ygridwidth=0.7,
+                            #yminorgridcolor = :grey10 ,
+                            #ygridcolor=:grey30,
+                            yminorgridvisible = false, 
+                            ygridvisible = false,
+                            yticksvisible=false,
+                            yticklabelsvisible=false,
+                            ylabelsize = 18,
+                            ylabelfont = :bold,
+                            )
+
+                        if whichletter ∈ [1,3,6]
+                            ax.xlabel = "Event"
+                        else
+                            hidexdecorations!(ax, grid=false, minorgrid=false)
+                            hidespines!(ax, :b) 
+                        end
+
+                        if i>1
+                            hidespines!(ax,:t)
+                            #hidexdecorations!(ax_event, grid=false)
+                        end
+
+                        ma = zeros(17,1)
+                        for ev in 1:17
+                            #va = 0.4
+                            #vl = 2.0
+                            #vsc = (:white,1.0)
+                            #vc = :black
+                            if typeof(v.slopes[ev]) != Nothing
+                                if v.slopes[ev] >0 
+                                    ma[ev,1]+=1
+                            #        vc = :red
+                            #        vsc = (:darkred,0.1)
+                                    if v.p_one[ev] < plim
+                                        ma[ev,1]+=1
+                            #            va = 0.9
+                            #            vl = 3.5
+                            #            vsc = (:darkred,0.8)
+                                        n_v +=1
+                                        push!(which_v, ev)
+                                    end
+                                
+                                else
+                            #        vc = :blue
+                            #        vsc = (:steelblue,0.1)
+                                end
+                            end
+                            # vspan!(axv, [GI_onsets[ev]], [GS_onsets[ev]], color = vsc)
+                            # pv = Polynomials.fit(v.times[ev][findall(!ismissing, v.vals[ev])], convert.(Float64,v.vals[ev][findall(!ismissing, v.vals[ev])]),1)
+                            # lines!(axv,v.times[ev], v.vals[ev], color = :black, alpha = va)#, linewidth = vl)
+                            # lines!(axv, v.times[ev], pv.(v.times[ev]), color = vc, alpha = va, linewidth = vl)
+                            # vlines!(axv, [GI_onsets[ev]], color = :darkred, alpha = va, linewidth = vl)
+                        end
+                        co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                        hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                        # xlims!(axv,nothing,nothing)
+                        # axv.xreversed = true
+                        # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+                    elseif k == 2
+                        ax = Axis(gl[1,1],
+                            xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                            xreversed = true,
+                            xticklabelrotation = pi*0.4,
+                            #yreversed=true,
+                            ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}",
+                            #xlabel = "Transition",
+                            xminorgridwidth = 1,
+                            xgridwidth=0,
+                            xminorgridcolor = :grey10 ,
+                            xgridcolor=:transparent,
+                            xminorgridvisible = true, 
+                            xgridvisible = false,
+                            #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                            #ylabel = "Ice core",
+                            yminorgridwidth = 1,
+                            ygridwidth=0.7,
+                            yminorgridcolor = :grey10 ,
+                            ygridcolor=:grey30,
+                            yminorgridvisible = false, 
+                            ygridvisible = false,
+                            yticksvisible=false,
+                            yticklabelsvisible=false,
+                            ylabelsize = 18,
+                            ylabelfont = :bold,
+                            )
+
+                        if whichletter ∈ [1,3,6]
+                            ax.xlabel = "Event"
+                        else
+                            hidexdecorations!(ax, grid=false, minorgrid=false)
+                            hidespines!(ax, :b) 
+                        end
+                        #hidedecorations!(ax, label=true)
+
+                        if i>1
+                            hidespines!(ax,:t)
+                            #hidexdecorations!(ax_event, grid=false)
+                        end
+
+                        ma = zeros(17,1)
+                        
+                        for ev in 1:17
+                            #aa = 0.4
+                            #al = 2.0
+                            #asc = (:white,1.0)
+                            #ac = :black
+                            if typeof(a.slopes[ev]) != Nothing
+                                if a.slopes[ev] >0 
+                                    #ac = :red
+                                    #asc = (:darkred,0.1)
+                                    ma[ev,1]+=1
+                                    if a.p_one[ev] < plim
+                                        ma[ev,1]+=1
+                                        #aa = 0.9
+                                        #al = 3.5
+                                        #asc = (:darkred,0.8)
+                                        n_a +=1
+                                        if ev in which_v
+                                            n_both +=1
+                                        end
+                                    end
+                                
+                                #else
+                                #    ac = :blue
+                                #    asc = (:steelblue,0.1)
+                                end
+                            end
+                            # vspan!(axa, [GI_onsets[ev]], [GS_onsets[ev]], color = asc)
+                            # pa = Polynomials.fit(a.times[ev][findall(!ismissing, a.vals[ev])], convert.(Float64,a.vals[ev][findall(!ismissing, a.vals[ev])]),1)
+                            # lines!(axa,a.times[ev], a.vals[ev], color = :black, alpha = aa)#, linewidth = vl)
+                            # lines!(axa, a.times[ev], pa.(a.times[ev]), color = ac, alpha = aa, linewidth = al)
+                            # vlines!(axa, [GI_onsets[ev]], color = :darkred, alpha = aa, linewidth = al)
+
+                        end
+                        co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                        hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                        #ax.xlabel = "Transition"
+                        #xlims!(axa,nothing,nothing)
+                        #axa.xreversed = true
+                        #xlims!(ax_event, axa.xaxis.attributes.limits[]...)
+                        #ax_event.xreversed = true
+                    end
+
+
+                    Label(gl[1,1,TopLeft()], letters_h[k,whichletter], fontsize = 20,
+                                font = :bold, padding = (0,20,-10,15),
+                                halign = :left, valign =:bottom)
+                end
+                if i == 1
+                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,0.0,30.0), valign = :center, font=:bold,fontsize = 20)
+                else
+                    Label(f_wave_ts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(reverse(ylabs2b[it])[i]): }\mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,14.0,12.0), valign = :center, font=:bold,fontsize = 20)
+                end
+            end
+        end
+
+        Label(f_wave_ts[1,1:end,Top()], "EWS in ($(s1)-$(s2)) year band of records with 5-year resolution", padding = (0.0,0.0,60.0,25.0), valign = :bottom, font = :bold, fontsize = 20)
+        Label(f_wave_ts[2,1:end,Top()], "EWS in ($(s1)-$(s2)) year band of records with 10-year resolution", padding = (0.0,0.0,60.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
+        Label(f_wave_ts[4,1:end,Top()], "EWS in ($(s1)-$(s2)) year band of records with 20-year resolution", padding = (0.0,0.0,60.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
+        
+        if legend
+            # elems = [
+            #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+            #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            #     ]
+            # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+            elems = [
+                [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+                [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+                [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+                ]
+            labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+            Legend(f_wave_ts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+        end
+
+        colgap!(f_wave_ts.layout, 20)
+        rowgap!(f_wave_ts.layout, 0)
+
+        if saving
+            save(savetos[snum],f_wave_ts)
+        end
+        if showing
+            display(f_wave_ts)
+        end
+    end
+end
+
+plot_all_wave_ts2_label_aggr(lowpass = true, smoothw = false, plim = plim, scales = [(20,60)],showing = showing,saving = saving,legend = true,
+                savetos = ["do_ews_across_greenland_ice_cores/figures/fig9_aggr.pdf"])
+plot_all_wave_ts2_label_aggr(lowpass = false, smoothw = false, plim = plim, scales = [(20,60)],showing = showing,saving = saving,legend = true,
+                savetos = ["do_ews_across_greenland_ice_cores/figures/figS21_aggr.pdf"])
 
 
 #Fig S12
@@ -2189,7 +3844,7 @@ function plot_compare_methods_ngrip_csd2(; method = "TFTS", include_filtering = 
             gl = fts[whichletter,k] = GridLayout()
             if k == 1
                 axv = Axis(gl[1,1], 
-                    ylabel = L"\mathrm{\sigma^𝟤}", 
+                    ylabel = L"\mathrm{𝖵}", 
                     ylabelsize = 18,
                     ylabelfont = :bold,
                     xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -2292,7 +3947,7 @@ function plot_compare_methods_ngrip_csd2(; method = "TFTS", include_filtering = 
                             font = :bold, padding = (0,20,-10,15),#(0,5,5,0),
                             halign = :left,valign =:bottom)
         end
-        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{𝖵} = %$(sstring(n_v)), } \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                      padding = (0.0,0.0,20.0,20.0), valign = :bottom, font = :bold, fontsize = 20)
     end
     if legend
@@ -2321,7 +3976,7 @@ function plot_compare_methods_ngrip_csd2(; method = "TFTS", include_filtering = 
 end
 
 plot_compare_methods_ngrip_csd2(method = "TFTS", include_filtering = true,lowpass = true, plim = plim, py2=true,showing = showing,saving = saving,
-                        legend=true, saveto ="figures/figS12.pdf")
+                        legend=true, saveto ="do_ews_across_greenland_ice_cores/figures/figS12.pdf")
 
 
 
@@ -2392,7 +4047,7 @@ function plot_compare_methods_shorter_ngrip_csd2_label(; method = "TFTS",
             gl = fts[whichletter,k] = GridLayout()
             if k == 1
                 axv = Axis(gl[1,1], 
-                    ylabel = L"\mathrm{\sigma^𝟤}", 
+                    ylabel = L"\mathrm{𝖵}", 
                     ylabelsize = 18,
                     ylabelfont = :bold,
                     xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -2517,7 +4172,7 @@ function plot_compare_methods_shorter_ngrip_csd2_label(; method = "TFTS",
                 font = :bold, padding = (0,20,-10,15),
                 halign = :left,valign =:bottom)
         end
-        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{𝖵} = %$(sstring(n_v)), } \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                 padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
 
     end
@@ -2547,11 +4202,286 @@ function plot_compare_methods_shorter_ngrip_csd2_label(; method = "TFTS",
 end
 
 plot_compare_methods_shorter_ngrip_csd2_label(method = "TFTS",lowpass = true, plim = plim, label_w_steps=true,py2=true,legend = true,
-            showing = showing, saving = saving, saveto = "figures/fig4.pdf")
+            showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig4.pdf")
 plot_compare_methods_shorter_ngrip_csd2_label(method = "TFTS",lowpass = false, plim = plim, label_w_steps=true,py2=true,legend = true,
-            showing = showing, saving = saving, saveto = "figures/figS15.pdf")
+            showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS15.pdf")
 
 
+function plot_compare_methods_shorter_ngrip_csd2_label_aggr(; method = "TFTS",
+            lowpass = lowpass, 
+            plim = plim, 
+            py2=true,
+            showing = true,
+            saving = false,
+            label_w_steps = true,
+            legend = true,
+            saveto ="paper/compare_methods_csd_shorter2_aggr_ngrip5_$(method)_lowpass_$(lowpass)_p_$(plim)_stepnumber_$(label_w_steps).pdf")
+    
+    type = "NGRIP5"
+    _, var_names, vars, _, acs, _ = load_data(type)
+
+    file1(v) = findfirst(==("NIKLAS_w_200_N_lowpass_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_10000_FOURIER.jld2"),v)
+    file2(v) = findfirst(==("w_200_normed_filt_N_lowpass_gs_short_FiltInd_true_onlyfull_false_10000_$method.jld2"),v)
+
+    file4(v) = findfirst(==("w_200_normed_filt_N_lowpass_gs_FiltInd_false_onlyfull_true_10000_$method.jld2"),v)
+
+    file6(v) = findfirst(==("w_200_normed_filt_C_no_lowpass_gs_FiltInd_false_onlyfull_true_10000_$method.jld2"),v)
+
+    file7(v) = findfirst(==("w_200_normed_filt_C_lowpass_gs_FiltInd_false_onlyfull_true_10000_$method.jld2"),v)
+
+    file1p(v) = findfirst(==("NIKLAS_w_200_N_lowpass_py2_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_10000_FOURIER.jld2"),v)
+    file2p(v) = findfirst(==("w_200_normed_filt_N_lowpass_py2_gs_short_FiltInd_true_onlyfull_false_10000_TFTS.jld2"),v)
+    file3p(v) = findfirst(==("w_200_normed_filt_N_lowpass_py2_gs_short_FiltInd_false_onlyfull_false_10000_TFTS.jld2"),v)
+    file4p(v) = findfirst(==("w_200_normed_filt_N_lowpass_py2_gs_FiltInd_false_onlyfull_true_10000_TFTS.jld2"),v)
+
+
+    if lowpass
+        file_list = [file1, file2, file4, file7]  
+    else
+        file_list = [file1, file2, file4, file6]
+    end
+
+    if py2
+        if lowpass
+            file_list = [file1p, file2p, file4p, file7]
+        else
+            file_list = [file1p, file2p, file4p, file6]
+        end
+    end
+    version_names = ["Boers, 2018", "Modified significance testing", "Modified EWS calculation", "Modified data preprocessing"]
+    if label_w_steps == true
+        version_names = ["Boers, 2018", "Modified significance testing (Step 1)", "Modified EWS calculation (Step 2a)", "Modified data preprocessing (Step 3)"]
+    end
+
+    fts = Figure(size=(1200, 200*length(file_list)))
+    letters_h = reshape(letters[1:18],2,9)
+    
+    whichletter = 0
+
+
+
+        
+    for (i,ff) in enumerate(file_list)
+        whichletter +=1
+
+        good = ff(var_names)
+        v = vars[good]
+        a = acs[good]
+
+        n_v = 0 
+        n_a = 0
+        n_both = 0
+        which_v = []
+        
+        for k = 1:2
+            gl = fts[whichletter,k] = GridLayout()
+            
+            
+
+            if k == 1
+                ax = Axis(gl[1,1],
+                    xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                    xreversed = true,
+                    xticklabelrotation = pi*0.4,
+                    #yreversed=true,
+                    ylabel =  L"\mathrm{𝖵}",
+                    #xlabel = "Transition",
+                    xminorgridwidth = 1,
+                    xgridwidth=0,
+                    xminorgridcolor = :grey10 ,
+                    xgridcolor=:transparent,
+                    xminorgridvisible = true, 
+                    xgridvisible = false,
+                    #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                    #ylabel = "Ice core",
+                    #yminorgridwidth = 1,
+                    #ygridwidth=0.7,
+                    #yminorgridcolor = :grey10 ,
+                    #ygridcolor=:grey30,
+                    yminorgridvisible = false, 
+                    ygridvisible = false,
+                    yticksvisible=false,
+                    yticklabelsvisible=false,
+                    ylabelsize = 18,
+                    ylabelfont = :bold,
+                    )
+
+                if whichletter == length(file_list)
+                    ax.xlabel = "Event"
+                else
+                    hidexdecorations!(ax, grid=false, minorgrid=false)
+                    hidespines!(ax, :b) 
+                end
+
+                if i>1
+                    hidespines!(ax,:t)
+                    #hidexdecorations!(ax_event, grid=false)
+                end
+
+                ma = zeros(17,1)
+                for ev in 1:17
+                    #va = 0.4
+                    #vl = 2.0
+                    #vsc = (:white,1.0)
+                    #vc = :black
+                    if typeof(v.slopes[ev]) != Nothing
+                        if v.slopes[ev] >0 
+                            ma[ev,1]+=1
+                    #        vc = :red
+                    #        vsc = (:darkred,0.1)
+                            if v.p_one[ev] < plim
+                                ma[ev,1]+=1
+                    #            va = 0.9
+                    #            vl = 3.5
+                    #            vsc = (:darkred,0.8)
+                                n_v +=1
+                                push!(which_v, ev)
+                            end
+                        
+                        else
+                    #        vc = :blue
+                    #        vsc = (:steelblue,0.1)
+                        end
+                    end
+                    # vspan!(axv, [GI_onsets[ev]], [GS_onsets[ev]], color = vsc)
+                    # pv = Polynomials.fit(v.times[ev][findall(!ismissing, v.vals[ev])], convert.(Float64,v.vals[ev][findall(!ismissing, v.vals[ev])]),1)
+                    # lines!(axv,v.times[ev], v.vals[ev], color = :black, alpha = va)#, linewidth = vl)
+                    # lines!(axv, v.times[ev], pv.(v.times[ev]), color = vc, alpha = va, linewidth = vl)
+                    # vlines!(axv, [GI_onsets[ev]], color = :darkred, alpha = va, linewidth = vl)
+                end
+                co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                # xlims!(axv,nothing,nothing)
+                # axv.xreversed = true
+                # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+            elseif k == 2
+                ax = Axis(gl[1,1],
+                    xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                    xreversed = true,
+                    xticklabelrotation = pi*0.4,
+                    #yreversed=true,
+                    ylabel =  L"\mathrm{\alpha_𝟣}",
+                    #xlabel = "Transition",
+                    xminorgridwidth = 1,
+                    xgridwidth=0,
+                    xminorgridcolor = :grey10 ,
+                    xgridcolor=:transparent,
+                    xminorgridvisible = true, 
+                    xgridvisible = false,
+                    #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                    #ylabel = "Ice core",
+                    yminorgridwidth = 1,
+                    ygridwidth=0.7,
+                    yminorgridcolor = :grey10 ,
+                    ygridcolor=:grey30,
+                    yminorgridvisible = false, 
+                    ygridvisible = false,
+                    yticksvisible=false,
+                    yticklabelsvisible=false,
+                    ylabelsize = 18,
+                    ylabelfont = :bold,
+                    )
+
+                if whichletter == length(file_list)
+                    ax.xlabel = "Event"
+                else
+                    hidexdecorations!(ax, grid=false, minorgrid=false)
+                    hidespines!(ax, :b) 
+                end
+                #hidedecorations!(ax, label=true)
+
+                if i>1
+                    hidespines!(ax,:t)
+                    #hidexdecorations!(ax_event, grid=false)
+                end
+
+                ma = zeros(17,1)
+                
+                for ev in 1:17
+                    #aa = 0.4
+                    #al = 2.0
+                    #asc = (:white,1.0)
+                    #ac = :black
+                    if typeof(a.slopes[ev]) != Nothing
+                        if a.slopes[ev] >0 
+                            #ac = :red
+                            #asc = (:darkred,0.1)
+                            ma[ev,1]+=1
+                            if a.p_one[ev] < plim
+                                ma[ev,1]+=1
+                                #aa = 0.9
+                                #al = 3.5
+                                #asc = (:darkred,0.8)
+                                n_a +=1
+                                if ev in which_v
+                                    n_both +=1
+                                end
+                            end
+                        
+                        #else
+                        #    ac = :blue
+                        #    asc = (:steelblue,0.1)
+                        end
+                    end
+                    # vspan!(axa, [GI_onsets[ev]], [GS_onsets[ev]], color = asc)
+                    # pa = Polynomials.fit(a.times[ev][findall(!ismissing, a.vals[ev])], convert.(Float64,a.vals[ev][findall(!ismissing, a.vals[ev])]),1)
+                    # lines!(axa,a.times[ev], a.vals[ev], color = :black, alpha = aa)#, linewidth = vl)
+                    # lines!(axa, a.times[ev], pa.(a.times[ev]), color = ac, alpha = aa, linewidth = al)
+                    # vlines!(axa, [GI_onsets[ev]], color = :darkred, alpha = aa, linewidth = al)
+
+                end
+                co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                #ax.xlabel = "Transition"
+                #xlims!(axa,nothing,nothing)
+                #axa.xreversed = true
+                #xlims!(ax_event, axa.xaxis.attributes.limits[]...)
+                #ax_event.xreversed = true
+            end
+
+
+            Label(gl[1,1,TopLeft()], letters_h[k,whichletter], fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left, valign =:bottom)
+        end
+            Label(fts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{𝖵} = %$(sstring(n_v)), } \mathrm{𝗇_{\alpha_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
+
+    end
+    
+    if legend
+        # elems = [
+        #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+        #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+        #     ]
+        # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        elems = [
+            [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            ]
+        labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        Legend(fts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+    end
+
+    colgap!(fts.layout, 20)
+    rowgap!(fts.layout, 0)
+    Label(fts[1,1:end,Top()], "EWS in 100-year high-pass filtered NGRIP record with 5-year resolution", 
+        padding = (0.0,0.0,80.0,3.0), valign = :bottom, font = :bold, fontsize = 20)
+
+    if saving
+        save(saveto,fts)
+    end
+    if showing
+        display(fts)
+    end
+end
+
+plot_compare_methods_shorter_ngrip_csd2_label_aggr(method = "TFTS",lowpass = true, plim = plim, label_w_steps=true,py2=true,legend = true,
+            showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig4_aggr.pdf")
+plot_compare_methods_shorter_ngrip_csd2_label_aggr(method = "TFTS",lowpass = false, plim = plim, label_w_steps=true,py2=true,legend = true,
+            showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS15_aggr.pdf")
 
 # Fig S13
 function plot_compare_methods_ngrip_wave2(;method = "TFTS", smooth_w = smoothw, 
@@ -2759,7 +4689,7 @@ function plot_compare_methods_ngrip_wave2(;method = "TFTS", smooth_w = smoothw,
                 end
             elseif k == 2
                 axa = Axis(gl[1,1], 
-                    ylabel =  L"\mathrm{\hat{𝖧}}",
+                    ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}",
                     ylabelsize = 18,
                     ylabelfont = :bold,
                     xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -2812,7 +4742,7 @@ function plot_compare_methods_ngrip_wave2(;method = "TFTS", smooth_w = smoothw,
                 halign = :left,valign =:bottom)
         end
 
-        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                             padding = (0.0,0.0,20.0,20.0), valign = :bottom, font = :bold, fontsize = 20)
     end
     if legend
@@ -2841,7 +4771,7 @@ function plot_compare_methods_ngrip_wave2(;method = "TFTS", smooth_w = smoothw,
 end
 
 plot_compare_methods_ngrip_wave2(method = "TFTS", smooth_w = false, s1 = 10, s2=50, include_filtering = true, lowpass = true, 
-    plim = plim, py2=true,showing = showing,saving = saving,legend=true,saveto ="figures/figS13.pdf")
+    plim = plim, py2=true,showing = showing,saving = saving,legend=true,saveto ="do_ews_across_greenland_ice_cores/figures/figS13.pdf")
 
 
 # Fig 7 and S18
@@ -2986,7 +4916,7 @@ function plot_compare_methods_shorter_ngrip_wave2_label(;method = "TFTS", smooth
                 ax_event.xreversed = true
             elseif k == 2
                 axa = Axis(gl[1,1], 
-                        ylabel =  L"\mathrm{\hat{𝖧}}",
+                        ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}",
                         ylabelsize = 18,
                         ylabelfont = :bold,
                         xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -3051,7 +4981,7 @@ function plot_compare_methods_shorter_ngrip_wave2_label(;method = "TFTS", smooth
                 font = :bold, padding = (0,20,-10,15),#(0,5,5,0),
                 halign = :left,valign =:bottom)
         end
-        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(fts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                     padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
     end
     if legend
@@ -3079,11 +5009,304 @@ function plot_compare_methods_shorter_ngrip_wave2_label(;method = "TFTS", smooth
 end
 
 plot_compare_methods_shorter_ngrip_wave2_label(method = "TFTS", smooth_w =false, s1 = 10, s2=50,lowpass = true, label_w_steps = true,
-            plim = plim, py2=true,showing = showing,saving = saving,legend = true, saveto ="figures/fig7.pdf")
+            plim = plim, py2=true,showing = showing,saving = saving,legend = true, saveto ="do_ews_across_greenland_ice_cores/figures/fig7.pdf")
 plot_compare_methods_shorter_ngrip_wave2_label(method = "TFTS", smooth_w =false, s1 = 10, s2=50,lowpass = false, label_w_steps = true,
-            plim = plim, py2=true,showing = showing,saving = saving,legend = true, saveto ="figures/figS18.pdf")
+            plim = plim, py2=true,showing = showing,saving = saving,legend = true, saveto ="do_ews_across_greenland_ice_cores/figures/figS18.pdf")
 
 
+function plot_compare_methods_shorter_ngrip_wave2_label_aggr(;method = "TFTS", smooth_w = smoothw, s1 = 10, s2=50,
+    lowpass = lowpass, 
+    plim = plim, 
+    py2=true,
+    label_w_steps = true,
+    showing = true,
+    saving = false,
+    legend = false,
+    saveto ="paper/compare_methods_wave_shorter2_aggr_ngrip5_$(s1)_$(s2)_$(method)_lowpass_$(lowpass)_smoothw_$(smoothw)_p_$(plim).pdf")
+    
+    type = "NGRIP5"
+    _, _, _, _, _, sca_names, scas, hurst_names, hursts, _ = load_data(type)
+
+    file1(v) = findfirst(==("NIKLAS_s1_$(s1)_s2_$(s2)_N_lowpass_PAUL_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_smoothw_true_10000_FOURIER.jld2"), v)   
+
+    #if smoothw
+    file2w(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_PAUL_normed_filt_gs_short_FiltInd_true_normalise_false_nocoi_false_onlyfull_false_smoothw_true_10000_$method.jld2"), v) 
+    file4w(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_PAUL_normed_filt_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_true_10000_$method.jld2"), v)
+    file7w(v) = findfirst(==("s1_$(s1)_s2_$(s2)_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_true_10000_$method.jld2"), v)
+    file9w(v) = findfirst(==("s1_$(s1)_s2_$(s2)_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_true_10000_$method.jld2"), v)
+
+    #else
+    file2(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_PAUL_normed_filt_gs_short_FiltInd_true_normalise_false_nocoi_false_onlyfull_false_smoothw_true_10000_$method.jld2"), v)
+    file5(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_PAUL_normed_filt_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_false_smoothw_false_10000_$method.jld2"), v)
+    file8(v) = findfirst(==("s1_$(s1)_s2_$(s2)_C_no_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_$method.jld2"), v)
+    file10(v) = findfirst(==("s1_$(s1)_s2_$(s2)_C_lowpass_PAUL_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_$method.jld2"), v)
+
+    #py files
+    file1p(v) = findfirst(==("NIKLAS_s1_$(s1)_s2_$(s2)_N_lowpass_py2_PAUL_FiltInd_true_onlyfull_false_detrend_GLSAR_DemeanSur_true_smoothw_true_10000_FOURIER.jld2"),v)
+    file2p(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_py2_PAUL_normed_gs_short_FiltInd_true_normalise_false_nocoi_false_onlyfull_false_smoothw_true_10000_TFTS.jld2"),v)
+    file5p(v) = findfirst(==("s1_$(s1)_s2_$(s2)_N_lowpass_py2_PAUL_normed_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_false_smoothw_false_10000_TFTS.jld2"),v)
+
+    if smooth_w
+        if lowpass
+            file_list = [file1, file2w, file4w, file9w]
+        else
+            file_list = [file1, file2w, file4w, file7w]
+        end
+
+        else
+        if lowpass
+            file_list = [file1, file2, file5, file10]
+        else
+            file_list = [file1, file2, file5, file8]
+        end 
+    end
+
+    if py2
+        if lowpass
+            file_list = [file1p, file2p, file5p, file10]
+        else
+            file_list = [file1p, file2p, file5p, file8]
+        end
+    end
+
+    version_names = ["Boers, 2018", "Modified significance testing", "Modified EWS calculation", "Modified data preprocessing"]
+    if label_w_steps == true
+        version_names = ["Boers, 2018", "Modified significance testing (Step 1)", "Modified EWS calculation (Step 2b)", "Modified data preprocessing (Step 3)"]
+    end
+
+
+    fts = Figure(size=(1200, 200*length(file_list)))
+    letters_h = reshape(letters[1:18],2,9)
+    
+    whichletter = 0
+
+    if method == "FOURIER"
+        file_list = file_list[1:end-1]
+    end
+
+
+        
+    for (i,ff) in enumerate(file_list)
+        whichletter +=1
+
+        good = ff(sca_names)
+        v = scas[good]
+        a = hursts[good]
+
+        n_v = 0 
+        n_a = 0
+        n_both = 0
+        which_v = []
+        
+        for k = 1:2
+            gl = fts[whichletter,k] = GridLayout()
+            
+
+            if k == 1
+                ax = Axis(gl[1,1],
+                    xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                    xreversed = true,
+                    xticklabelrotation = pi*0.4,
+                    #yreversed=true,
+                    ylabel = L"\mathrm{\hat{𝗐}^𝟤}", 
+                    #xlabel = "Transition",
+                    xminorgridwidth = 1,
+                    xgridwidth=0,
+                    xminorgridcolor = :grey10 ,
+                    xgridcolor=:transparent,
+                    xminorgridvisible = true, 
+                    xgridvisible = false,
+                    #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                    #ylabel = "Ice core",
+                    #yminorgridwidth = 1,
+                    #ygridwidth=0.7,
+                    #yminorgridcolor = :grey10 ,
+                    #ygridcolor=:grey30,
+                    yminorgridvisible = false, 
+                    ygridvisible = false,
+                    yticksvisible=false,
+                    yticklabelsvisible=false,
+                    ylabelsize = 18,
+                    ylabelfont = :bold,
+                    )
+
+                if whichletter == length(file_list)
+                    ax.xlabel = "Event"
+                else
+                    hidexdecorations!(ax, grid=false, minorgrid=false)
+                    hidespines!(ax, :b) 
+                end
+
+                if i>1
+                    hidespines!(ax,:t)
+                    #hidexdecorations!(ax_event, grid=false)
+                end
+
+                ma = zeros(17,1)
+                for ev in 1:17
+                    #va = 0.4
+                    #vl = 2.0
+                    #vsc = (:white,1.0)
+                    #vc = :black
+                    if typeof(v.slopes[ev]) != Nothing
+                        if v.slopes[ev] >0 
+                            ma[ev,1]+=1
+                    #        vc = :red
+                    #        vsc = (:darkred,0.1)
+                            if v.p_one[ev] < plim
+                                ma[ev,1]+=1
+                    #            va = 0.9
+                    #            vl = 3.5
+                    #            vsc = (:darkred,0.8)
+                                n_v +=1
+                                push!(which_v, ev)
+                            end
+                        
+                        else
+                    #        vc = :blue
+                    #        vsc = (:steelblue,0.1)
+                        end
+                    end
+                    # vspan!(axv, [GI_onsets[ev]], [GS_onsets[ev]], color = vsc)
+                    # pv = Polynomials.fit(v.times[ev][findall(!ismissing, v.vals[ev])], convert.(Float64,v.vals[ev][findall(!ismissing, v.vals[ev])]),1)
+                    # lines!(axv,v.times[ev], v.vals[ev], color = :black, alpha = va)#, linewidth = vl)
+                    # lines!(axv, v.times[ev], pv.(v.times[ev]), color = vc, alpha = va, linewidth = vl)
+                    # vlines!(axv, [GI_onsets[ev]], color = :darkred, alpha = va, linewidth = vl)
+                end
+                co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                # xlims!(axv,nothing,nothing)
+                # axv.xreversed = true
+                # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+            elseif k == 2
+                ax = Axis(gl[1,1],
+                    xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                    xreversed = true,
+                    xticklabelrotation = pi*0.4,
+                    #yreversed=true,
+                    ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}",
+                    #xlabel = "Transition",
+                    xminorgridwidth = 1,
+                    xgridwidth=0,
+                    xminorgridcolor = :grey10 ,
+                    xgridcolor=:transparent,
+                    xminorgridvisible = true, 
+                    xgridvisible = false,
+                    #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                    #ylabel = "Ice core",
+                    yminorgridwidth = 1,
+                    ygridwidth=0.7,
+                    yminorgridcolor = :grey10 ,
+                    ygridcolor=:grey30,
+                    yminorgridvisible = false, 
+                    ygridvisible = false,
+                    yticksvisible=false,
+                    yticklabelsvisible=false,
+                    ylabelsize = 18,
+                    ylabelfont = :bold,
+                    )
+
+                if whichletter == length(file_list)
+                    ax.xlabel = "Event"
+                else
+                    hidexdecorations!(ax, grid=false, minorgrid=false)
+                    hidespines!(ax, :b) 
+                end
+                #hidedecorations!(ax, label=true)
+
+                if i>1
+                    hidespines!(ax,:t)
+                    #hidexdecorations!(ax_event, grid=false)
+                end
+
+                ma = zeros(17,1)
+                
+                for ev in 1:17
+                    #aa = 0.4
+                    #al = 2.0
+                    #asc = (:white,1.0)
+                    #ac = :black
+                    if typeof(a.slopes[ev]) != Nothing
+                        if a.slopes[ev] >0 
+                            #ac = :red
+                            #asc = (:darkred,0.1)
+                            ma[ev,1]+=1
+                            if a.p_one[ev] < plim
+                                ma[ev,1]+=1
+                                #aa = 0.9
+                                #al = 3.5
+                                #asc = (:darkred,0.8)
+                                n_a +=1
+                                if ev in which_v
+                                    n_both +=1
+                                end
+                            end
+                        
+                        #else
+                        #    ac = :blue
+                        #    asc = (:steelblue,0.1)
+                        end
+                    end
+                    # vspan!(axa, [GI_onsets[ev]], [GS_onsets[ev]], color = asc)
+                    # pa = Polynomials.fit(a.times[ev][findall(!ismissing, a.vals[ev])], convert.(Float64,a.vals[ev][findall(!ismissing, a.vals[ev])]),1)
+                    # lines!(axa,a.times[ev], a.vals[ev], color = :black, alpha = aa)#, linewidth = vl)
+                    # lines!(axa, a.times[ev], pa.(a.times[ev]), color = ac, alpha = aa, linewidth = al)
+                    # vlines!(axa, [GI_onsets[ev]], color = :darkred, alpha = aa, linewidth = al)
+
+                end
+                co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+                hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+                #ax.xlabel = "Transition"
+                #xlims!(axa,nothing,nothing)
+                #axa.xreversed = true
+                #xlims!(ax_event, axa.xaxis.attributes.limits[]...)
+                #ax_event.xreversed = true
+            end
+
+
+            Label(gl[1,1,TopLeft()], letters_h[k,whichletter], fontsize = 20,
+                        font = :bold, padding = (0,20,-10,15),
+                        halign = :left, valign =:bottom)
+        end
+            Label(fts[whichletter,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}", 
+            padding = (0.0,0.0,20.0,20.0), valign = :center, font=:bold,fontsize = 20)
+
+    end
+    
+    if legend
+        # elems = [
+        #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+        #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+        #     ]
+        # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        elems = [
+            [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            ]
+        labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        Legend(fts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+    end
+
+    colgap!(fts.layout, 20)
+    rowgap!(fts.layout, 0)
+    Label(fts[1,1:end,Top()], "EWS in($(s1)-$(s2)) year band of NGRIP record with 5-year resolution", 
+        padding = (0.0,0.0,80.0,3.0), valign = :bottom, font = :bold, fontsize = 20)
+
+    if saving
+        save(saveto,fts)
+    end
+    if showing
+        display(fts)
+    end
+end
+
+plot_compare_methods_shorter_ngrip_wave2_label_aggr(method = "TFTS", smooth_w =false, s1 = 10, s2=50,lowpass = true, label_w_steps = true,
+            plim = plim, py2=true,showing = showing,saving = true,legend = true, saveto ="do_ews_across_greenland_ice_cores/figures/fig7_aggr.pdf")
+plot_compare_methods_shorter_ngrip_wave2_label_aggr(method = "TFTS", smooth_w =false, s1 = 10, s2=50,lowpass = false, label_w_steps = true,
+            plim = plim, py2=true,showing = showing,saving = true,legend = true, saveto ="do_ews_across_greenland_ice_cores/figures/figS18_aggr.pdf")
 
 # Fig3 and S16
 function plot_overall_significance_example_csd(;lowpass = true, plim = plim, showing = true, saving = false, saveto = "paper/ngrip5_example_overall_signif_csd_with_both_lowpass_$(lowpass)_p_$(plim).pdf")
@@ -3158,7 +5381,7 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
                             limits= (-0,6.6,nothing,nothing)
                             )
                     if ind == "var"
-                        ax.title = L"\textbf{\mathrm{\sigma^𝟤}}"
+                        ax.title = L"\textbf{\mathrm{𝖵}}"
                         vlines!(ax, [n_x], color=cm[2], linewidth=4, label = "Number of significant EWS",alpha=0.7)
                     elseif ind == "ac"
                         ax.title = L"\textbf{\mathrm{\alpha_𝟣}}"
@@ -3180,7 +5403,13 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
                     lines!(ax, 1:5,1:5, color = cm[1], linewidth=2, label = "Distribution numeric", visible = false)
 
 
-                    vlines!(ax,[quantile(test_dist.num_inc_one[jj,:],1-p)], 
+                    # vlines!(ax,[quantile(test_dist.num_inc_one[jj,:],1-p)], 
+                    #     color = cm[1],
+                    #     linewidth = 2, linestyle=(:dot,:dense),
+                    #     label = "0.95 significance level numeric")
+
+                    thr_num = significance_threshold(test_dist,round(1-p, digits=2))
+                    vlines!(ax,[thr_num-0.5], 
                         color = cm[1],
                         linewidth = 2, linestyle=(:dot,:dense),
                         label = "0.95 significance level numeric")
@@ -3191,7 +5420,12 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
                     lines!(ax,0:17, pdf.(b,0:17), color = cm[3],
                         linewidth = 2, 
                         label ="Distribution analytic")
-                    vlines!(ax,[quantile(b,1-p)], color = cm[3],
+                    # vlines!(ax,[quantile(b,1-p)], color = cm[3],
+                    #     linestyle = :dash,
+                    #     linewidth = 2, 
+                    #     label = "$(1-plim) significance level analytic")
+                    thr_ana = significance_threshold(b,round(1-p, digits=2))
+                    vlines!(ax,[thr_ana-0.5], color = cm[3],
                         linestyle = :dash,
                         linewidth = 2, 
                         label = "$(1-plim) significance level analytic")
@@ -3216,7 +5450,7 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
     
     gboth = fhist[2,1] = GridLayout()
     whichletter +=1
-    ax3 = Axis(gboth[1,1], title = L"\textbf{\mathrm{\sigma^𝟤} 𝖺𝗇𝖽 \mathrm{\alpha_𝟣}}",
+    ax3 = Axis(gboth[1,1], title = L"\textbf{\mathrm{𝖵} 𝖺𝗇𝖽 \mathrm{\alpha_𝟣}}",
                             titlesize=25,
                             titlefont = :bold,
                             ylabel = "Relative frequency",
@@ -3225,8 +5459,9 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
                             xticks = 0:1:17,
                             limits= (-0.1,6.6,nothing,nothing)
                             )
-    pboth = plim*plim
+    pboth = round(plim*plim, digits=5)
     bboth = Distributions.Binomial(17,pboth)
+    
     lines!(ax3,
             0:17, 
             pdf.(bboth,0:17), 
@@ -3234,7 +5469,12 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
             linewidth = 2, 
             label ="Distribution analytic (B(17,$(round(pboth, digits=4))))")
     vlines!(ax3, [n_both], color=cm[2], linewidth=4, alpha = 0.7)
-    vlines!(ax3,[quantile(bboth,1-plim)], color = cm[3],
+    # vlines!(ax3,[quantile(bboth,1-plim)], color = cm[3],
+    #             linestyle = :dash,
+    #             linewidth = 2, 
+    #             label = "$(1-plim) significance level analytic")
+    thr_ana2 = significance_threshold(bboth,round(1-plim, digits=2))
+    vlines!(ax3,[thr_ana2-0.5], color = cm[3],
                 linestyle = :dash,
                 linewidth = 2, 
                 label = "$(1-plim) significance level analytic")
@@ -3256,8 +5496,8 @@ function plot_overall_significance_example_csd(;lowpass = true, plim = plim, sho
 end
 
 
-plot_overall_significance_example_csd(lowpass=true, showing=showing, saving = saving, saveto = "figures/fig3.pdf")
-plot_overall_significance_example_csd(lowpass=false,showing=showing,  saving = saving, saveto = "figures/figS16.pdf")
+plot_overall_significance_example_csd(lowpass=true, showing=showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/new_fig3.pdf")
+plot_overall_significance_example_csd(lowpass=false,showing=showing,  saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/new_figS16.pdf")
 
 
 #create struct object for hurst (no lowpass, no smoothw) of the combined overall significance files
@@ -3435,13 +5675,14 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
                             yticks = 0:0.2:1, 
                             xlabel = "No. of false significant EWS (out of 17)",
                             xticks = 0:1:17,
-                            limits= (-0,6.7,nothing,nothing)
+                            #limits= (-0,6.7,nothing,nothing)
+                            limits= (-0.1,6.7,nothing,nothing)
                             )
                     if ind == "sca"
                         ax.title = L"\textbf{\mathrm{\hat{𝗐}^𝟤}}" 
                         vlines!(ax, [n_x], color=cm[2], linewidth=4, label = "Number of significant EWS",alpha=0.7)
                     elseif ind == "hurst"
-                        ax.title = L"\textbf{\mathrm{\hat{𝖧}}}" 
+                        ax.title = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}" 
                         vlines!(ax, [n_y], color=cm[2], linewidth=4, label = "Number of significant EWS",alpha=0.7)
                     end
                     ma = Int(maximum(test_dist.num_inc_one[jj,:]))
@@ -3458,10 +5699,16 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
                             )
                     lines!(ax, 1:5,1:5, color = cm[1], linewidth=2, label = "Distribution numeric", visible = false)
 
-                    vlines!(ax,[quantile(test_dist.num_inc_one[jj,:],1-p)], 
+                    # vlines!(ax,[quantile(test_dist.num_inc_one[jj,:],1-p)], 
+                    #     color = cm[1],
+                    #     linewidth = 2, linestyle=(:dot,:dense),
+                    #     label = "0.95 significance level numeric")
+                    thr_num = significance_threshold(test_dist,round(1-p, digits=2))
+                    vlines!(ax,[thr_num-0.5], 
                         color = cm[1],
                         linewidth = 2, linestyle=(:dot,:dense),
                         label = "0.95 significance level numeric")
+                    
 
                     n=17
                     b = Distributions.Binomial(n,p)
@@ -3469,7 +5716,12 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
                     lines!(ax,0:17, pdf.(b,0:17), color = cm[3], 
                         linewidth = 2, 
                         label ="Distribution analytic")# (B(17,$(plim)))")
-                    vlines!(ax,[quantile(b,1-p)], color = cm[3],
+                    # vlines!(ax,[quantile(b,1-p)], color = cm[3],
+                    #     linestyle = :dash,
+                    #     linewidth = 2, 
+                    #     label = "$(1-plim) significance level analytic")
+                    thr_ana = significance_threshold(b,round(1-p, digits=2))
+                    vlines!(ax,[thr_ana-0.5], color = cm[3],
                         linestyle = :dash,
                         linewidth = 2, 
                         label = "$(1-plim) significance level analytic")
@@ -3494,7 +5746,7 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
     
     gboth = fhist[2,1] = GridLayout()
     whichletter +=1
-    ax3 = Axis(gboth[1,1], title = L"\textbf{\mathrm{\hat{𝗐}^𝟤} 𝖺𝗇𝖽 \mathrm{\hat{𝖧}}}",
+    ax3 = Axis(gboth[1,1], title = L"\textbf{\mathrm{\hat{𝗐}^𝟤} 𝖺𝗇𝖽 \mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}",
                             titlesize=25,
                             titlefont = :bold,
                             ylabel = "Relative frequency",
@@ -3503,13 +5755,19 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
                             xticks = 0:1:17,
                             limits= (-0.1,6.7,nothing,nothing)
                             )
-    pboth = plim*plim
+    pboth = round(plim*plim, digits=5)
     bboth = Distributions.Binomial(17,pboth)
+
     lines!(ax3,0:17, pdf.(bboth,0:17), color=cm[3],
                         linewidth = 2, 
                         label ="Distribution analytic (B(17,$(round(pboth, digits=4))))")
     vlines!(ax3, [n_both], color=cm[2], linewidth=4, alpha = 0.7)
-    vlines!(ax3,[quantile(bboth,1-plim)], color = cm[3],
+    # vlines!(ax3,[quantile(bboth,1-plim)], color = cm[3],
+    #             linestyle = :dash,
+    #             linewidth = 2, 
+    #             label = "$(1-plim) significance level analytic")
+    thr_ana2 = significance_threshold(bboth,round(1-plim, digits=2))
+    vlines!(ax3,[thr_ana2-0.5], color = cm[3],
                 linestyle = :dash,
                 linewidth = 2, 
                 label = "$(1-plim) significance level analytic")
@@ -3530,8 +5788,8 @@ function plot_overall_significance_example_wave(;lowpass = true, plim = plim, sh
     end
 end
 
-plot_overall_significance_example_wave(lowpass = true, plim = plim, showing = showing, saving = saving, saveto = "figures/figA3.pdf")
-plot_overall_significance_example_wave(lowpass = false, plim = plim, showing = showing, saving = saving, saveto = "figures/figS19.pdf")
+#plot_overall_significance_example_wave(lowpass = true, plim = plim, showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/new_figA3.pdf")
+plot_overall_significance_example_wave(lowpass = false, plim = plim, showing = showing, saving = true, saveto = "do_ews_across_greenland_ice_cores/figures/new_figS19.pdf")
 
 
 
@@ -3587,7 +5845,7 @@ function plot_surrogates_distribution_csd2(ylabs2;event_no = [2], lowpass = lowp
                     gl = fhist[whichletter,kk] = GridLayout()
                     if kk == 1
                         axv = Axis(gl[1,1],
-                            title = L"\textbf{\mathrm{\sigma^𝟤}} \textbf{\textrm{%$(sstring(txt))%$(reverse(ylabs2[it])[i]) }}", 
+                            title = L"\textbf{\mathrm{𝖵}} \textbf{\textrm{%$(sstring(txt))%$(reverse(ylabs2[it])[i]) }}", 
                             titlesize=22,
                             titlefont = :bold,
                             ylabel = "Frequency",
@@ -3608,14 +5866,17 @@ function plot_surrogates_distribution_csd2(ylabs2;event_no = [2], lowpass = lowp
                                     )
                             lines!(axv, 1:5,1:5, color = cm[1], linewidth=2, label = "KDE", visible = false)
 
-                            vlines!(axv,[quantile(v.surr_slopes[:,k],1-plim)], 
-                                    color = cm[3], 
-                                    linewidth = 2,
-                                    label = "$(1-plim) confidence level")
                             vlines!(axv,[v.slopes[k]], 
                                     color = cm[2], 
                                     linewidth = 2,
                                     label = "observed trend")
+                            vlines!(axv,[quantile(v.surr_slopes[:,k],1-plim)], 
+                                    color = cm[3], 
+                                    linewidth = 2,
+                                    linestyle = :dash,
+                                    label = "$(1-plim) confidence level")
+
+                            
                         end
                         Legend(gl[1,1], axv,
                             tellwidth = false,
@@ -3646,12 +5907,13 @@ function plot_surrogates_distribution_csd2(ylabs2;event_no = [2], lowpass = lowp
                                     )
 
                             lines!(axa, 1:5,1:5, color = cm[1], linewidth=2, label = "KDE", visible = false)
-   
-                            vlines!(axa,[quantile(a.surr_slopes[:,k],1-plim)], color = cm[3],
-                                    linewidth = 2,label = "$(1-plim) confidence level" )
+                            
                             vlines!(axa,[a.slopes[k]], color = cm[2],#:red, 
                                     linewidth = 2,
                                     label = "observed trend")
+                            vlines!(axa,[quantile(a.surr_slopes[:,k],1-plim)], color = cm[3],
+                                    linewidth = 2, linestyle = :dash,label = "$(1-plim) confidence level" )
+                            
                         end
 
                         Legend(gl[1,1], axa,
@@ -3685,7 +5947,7 @@ function plot_surrogates_distribution_csd2(ylabs2;event_no = [2], lowpass = lowp
 end
 
 plot_surrogates_distribution_csd2(ylabs2,event_no = [2], lowpass = true, plim = plim, showing = showing, saving = saving, 
-    saveto = "figures/figS3.pdf")
+    saveto = "do_ews_across_greenland_ice_cores/figures/new_figS3.pdf")
 
 
 
@@ -3761,12 +6023,14 @@ function plot_surrogates_distribution_wave2(ylabs2;event_no = [2], srs = [(20,60
                                         boundary = (0.9*minimum(v.surr_slopes[:,k]),1.1*maximum(v.surr_slopes[:,k]))
                                         )
                                 lines!(axv, 1:5,1:5, color = cm[1], linewidth=2, label = "KDE", visible = false)
-                                vlines!(axv,[quantile(v.surr_slopes[:,k],1-plim)], color = cm[3], 
-                                        linewidth = 2,
-                                        label = "$(1-plim) confidence level")
+                                
                                 vlines!(axv,[v.slopes[k]], color = cm[2], 
                                         linewidth = 2,
                                         label = "observed trend")
+                                vlines!(axv,[quantile(v.surr_slopes[:,k],1-plim)], color = cm[3], 
+                                        linewidth = 2,
+                                        linestyle = :dash,
+                                        label = "$(1-plim) confidence level")
                             end
                             Legend(gl[1,1], axv,
                                         tellwidth = false,
@@ -3778,7 +6042,7 @@ function plot_surrogates_distribution_wave2(ylabs2;event_no = [2], srs = [(20,60
                         elseif kk == 2
                             if typeof(a.slopes[k]) != Nothing
                                 axa = Axis(gl[1,1], 
-                                title = L"\textbf{\mathrm{\hat{𝖧}}} \textbf{\textrm{%$(sstring(txt))%$(reverse(ylabs2[it])[i]) }}", 
+                                title = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}} \textbf{\textrm{%$(sstring(txt))%$(reverse(ylabs2[it])[i]) }}", 
                                 titlesize=22,
                                 titlefont = :bold,
                                 ylabel = "Frequency",
@@ -3795,11 +6059,11 @@ function plot_surrogates_distribution_wave2(ylabs2;event_no = [2], srs = [(20,60
                                         boundary = (0.9*minimum(a.surr_slopes[:,k]),1.1*maximum(a.surr_slopes[:,k]))
                                         )
  
-                                vlines!(axa,[quantile(a.surr_slopes[:,k],1-plim)], color = cm[3], 
-                                        linewidth = 2,label = "$(1-plim) confidence level" )
                                 vlines!(axa,[a.slopes[k]], color = cm[2],#:red, 
                                         linewidth = 2,
                                         label = "observed trend")
+                                vlines!(axa,[quantile(a.surr_slopes[:,k],1-plim)], color = cm[3], 
+                                        linewidth = 2, linestyle=:dash, label = "$(1-plim) confidence level" )
                             end
                             Legend(gl[1,1], axa,
                                         tellwidth = false,
@@ -3834,13 +6098,13 @@ function plot_surrogates_distribution_wave2(ylabs2;event_no = [2], srs = [(20,60
 end
 
 plot_surrogates_distribution_wave2(ylabs2;event_no = [2], srs = [(20,60)], lowpass = true, plim = plim,smoothw = false,
-        showing = showing, saving = saving ,savetos = ["figures/figS4.pdf"])
+        showing = showing, saving = saving ,savetos = ["do_ews_across_greenland_ice_cores/figures/new_figS4.pdf"])
 
 
 
 
 begin
-    wavepal_path = "new_surrogate_files/NGRIP_irreg/indicators_NGRIP_5y_c_wavepal_theta_time_sranges_10_0_50_tfts_ns_1000.npz"
+    wavepal_path = "do_ews_across_greenland_ice_cores/new_surrogate_files/NGRIP_irreg/indicators_NGRIP_5y_c_wavepal_theta_time_sranges_10_0_50_tfts_ns_1000.npz"
     wavepal_file = npzread(wavepal_path)
 end
 
@@ -3862,8 +6126,8 @@ function plot_wavepal_csd_ts_label(;plim = plim, legend = false,showing = true, 
             ind = wavepal_file["stds"][:,1,:]
             true_slopes = wavepal_file["slopes_sigma"][:,1]
             surr_slopes = wavepal_file["slopes_sigma"][:,2:end]
-            ind_name = L"\mathrm{\sigma^𝟤}"
-            ind_title = L"\textbf{\mathrm{\sigma^𝟤}}"
+            ind_name = L"\mathrm{𝖵}"
+            ind_title = L"\textbf{\mathrm{𝖵}}"
         elseif k == 2
             ind = wavepal_file["acs"][:,1,:]
             true_slopes = wavepal_file["slopes_alpha"][:,1]
@@ -3944,7 +6208,7 @@ function plot_wavepal_csd_ts_label(;plim = plim, legend = false,showing = true, 
     rowgap!(ff.layout, 0)
     txt = "Irregular temporal resolution"
     Label(ff[1,1:end,Top()], "EWS in 100-year high-pass filtered NGRIP record", padding = (0.0,0.0,110.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
-    Label(ff[1,1:end,Top()], L"\textbf{\textrm{%$(sstring(txt)):} \mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{\alpha}_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
+    Label(ff[1,1:end,Top()], L"\textbf{\textrm{%$(sstring(txt)):} \mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{\alpha}_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
     if saving
         save(saveto,ff)
     end
@@ -3954,8 +6218,150 @@ function plot_wavepal_csd_ts_label(;plim = plim, legend = false,showing = true, 
 end
 
 
-plot_wavepal_csd_ts_label(plim=0.05,legend = true,showing = showing, saving = saving, saveto = "figures/fig5.pdf")
+plot_wavepal_csd_ts_label(plim=0.05,legend = true,showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig5.pdf")
 
+
+function plot_wavepal_csd_ts_label_aggr(;plim = plim, legend = false,showing = true, saving = false, saveto = "paper/wavepal_csd_ts2_ngrip_p_$(plim).pdf")
+    
+    global wavepal_file
+
+    fts = Figure(size=(1200, 370))
+    
+        n_v = 0 
+        n_a = 0
+        n_both = 0
+        which_v = []
+        
+        for k = 1:2
+            gl = fts[1,k] = GridLayout()
+            
+            if k == 1
+                ind = wavepal_file["stds"][:,1,:]
+                true_slopes = wavepal_file["slopes_sigma"][:,1]
+                surr_slopes = wavepal_file["slopes_sigma"][:,2:end]
+                ind_name = L"\mathrm{𝖵}"
+                ind_title = L"\textbf{\mathrm{𝖵}}"
+            elseif k == 2
+                ind = wavepal_file["acs"][:,1,:]
+                true_slopes = wavepal_file["slopes_alpha"][:,1]
+                surr_slopes = wavepal_file["slopes_alpha"][:,2:end]
+                ind_name = L"\mathrm{\hat{\alpha}_𝟣}"
+                ind_title = L"\textbf{\mathrm{\hat{\alpha}_𝟣}}"
+            end
+            ax = Axis(gl[1,1],
+                xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+                xreversed = true,
+                xticklabelrotation = pi*0.4,
+                #yreversed=true,
+                ylabel =  ind_name,
+
+                xlabel = "Event",
+                xminorgridwidth = 1,
+                xgridwidth=0,
+                xminorgridcolor = :grey10 ,
+                xgridcolor=:transparent,
+                xminorgridvisible = true, 
+                xgridvisible = false,
+                #yticks = (1:6, ["NGRIP 5 y", "NGRIP 10 y", "NEEM 10 y", "NGRIP 20 y", "GRIP 20 y", "GISP2 20 y"]),
+                #ylabel = "Ice core",
+                #yminorgridwidth = 1,
+                #ygridwidth=0.7,
+                #yminorgridcolor = :grey10 ,
+                #ygridcolor=:grey30,
+                yminorgridvisible = false, 
+                ygridvisible = false,
+                yticksvisible=false,
+                yticklabelsvisible=false,
+                ylabelsize = 18,
+                ylabelfont = :bold,
+                )
+
+
+            ma = zeros(17,1)
+            for ev in 1:17
+                #va = 0.4
+                #vl = 2.0
+                #vsc = (:white,1.0)
+                #vc = :black
+                if typeof(ind[ev,:]) != Nothing
+                    if true_slopes[ev] >0 
+                        ma[ev,1]+=1
+                        pone = count(v -> v ≥ true_slopes[ev], surr_slopes[ev,:])/length(surr_slopes[ev,:])
+                #        vc = :red
+                #        vsc = (:darkred,0.1)
+                        if pone < plim
+                            ma[ev,1]+=1
+                #            va = 0.9
+                #            vl = 3.5
+                #            vsc = (:darkred,0.8)
+                            if k==1
+                                n_v +=1
+                                push!(which_v, ev)
+                            elseif k==2
+                                n_a +=1
+                                if ev in which_v
+                                    n_both +=1
+                                end
+                            end
+                        end
+                    end
+                end
+                # vspan!(axv, [GI_onsets[ev]], [GS_onsets[ev]], color = vsc)
+                # pv = Polynomials.fit(v.times[ev][findall(!ismissing, v.vals[ev])], convert.(Float64,v.vals[ev][findall(!ismissing, v.vals[ev])]),1)
+                # lines!(axv,v.times[ev], v.vals[ev], color = :black, alpha = va)#, linewidth = vl)
+                # lines!(axv, v.times[ev], pv.(v.times[ev]), color = vc, alpha = va, linewidth = vl)
+                # vlines!(axv, [GI_onsets[ev]], color = :darkred, alpha = va, linewidth = vl)
+            end
+            co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+            hm = heatmap!(ax, ma, colormap=co2, colorrange=(0,2))
+            # xlims!(axv,nothing,nothing)
+            # axv.xreversed = true
+            # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+    
+
+
+        Label(gl[1,1,TopLeft()], letters[k], fontsize = 20,
+                    font = :bold, padding = (0,20,-10,15),
+                    halign = :left, valign =:bottom)
+    end
+    
+
+    
+    
+    if legend
+        # elems = [
+        #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+        #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+        #     ]
+        # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        elems = [
+            [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            ]
+        labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        Legend(fts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+    end
+
+    colgap!(fts.layout, 20)
+    rowgap!(fts.layout, 0)
+
+    txt = "Irregular temporal resolution"
+    Label(fts[1,1:end,Top()], "EWS in 100-year high-pass filtered NGRIP record", padding = (0.0,0.0,80.0,3.0), valign = :bottom, font = :bold, fontsize = 20)
+    Label(fts[1,1:end,Top()], L"\textbf{\textrm{%$(sstring(txt)):} \mathrm{𝗇_{𝖵} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{\alpha}_𝟣} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
+
+
+    if saving
+        save(saveto,fts)
+    end
+    if showing
+        display(fts)
+    end
+end
+
+plot_wavepal_csd_ts_label_aggr(plim=0.05,legend = true,showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig5_aggr.pdf")
 
 #not used:
 function plot_wavepal_wave_ts_label(;plim = plim, legend = false, showing = true, saving = true, saveto = "paper/wavepal_wave_ts2_10_50_ngrip_p_$(plim).pdf")
@@ -3978,8 +6384,8 @@ function plot_wavepal_wave_ts_label(;plim = plim, legend = false, showing = true
             ind = wavepal_file["hursts"][:,1,1,:]
             true_slopes = wavepal_file["slopes_h"][:,1,1]
             surr_slopes = wavepal_file["slopes_h"][:,2:end,1]
-            ind_name = L"\mathrm{\hat{𝖧}}"
-            ind_title = L"\textbf{\mathrm{\hat{𝖧}}}"
+            ind_name = L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}"
+            ind_title = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
         axv = Axis(gl[1,1], 
                 xlabel = "Age (kyr b2k)", 
@@ -4054,7 +6460,7 @@ function plot_wavepal_wave_ts_label(;plim = plim, legend = false, showing = true
     rowgap!(ff.layout, 0)
     txt = "Irregular temporal resolution"
     Label(ff[1,1:end,Top()], "EWS in (10-50) year band of NGRIP record", padding = (0.0,0.0,110.0,30.0), valign = :bottom, font = :bold, fontsize = 20)
-    Label(ff[1,1:end,Top()], L"\textbf{\textrm{%$(sstring(txt)):} \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
+    Label(ff[1,1:end,Top()], L"\textbf{\textrm{%$(sstring(txt)):} \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)),} \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)),} \mathrm{𝗇_{\text{𝖻𝗈𝗍𝗁}} = %$(sstring(n_both))}}", padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
     if saving
         save(saveto,ff)
     end
@@ -4080,7 +6486,7 @@ function plot_wavepal_surrogates_distribution_csd(;event_no = 2, plim = plim,
         if k == 1
             true_slopes = wavepal_file["slopes_sigma"][:,1]
             surr_slopes = wavepal_file["slopes_sigma"][:,2:end]
-            ind_title = L"\textbf{\mathrm{\sigma^𝟤}}"
+            ind_title = L"\textbf{\mathrm{𝖵}}"
         elseif k == 2
             true_slopes = wavepal_file["slopes_alpha"][:,1]
             surr_slopes = wavepal_file["slopes_alpha"][:,2:end]
@@ -4105,10 +6511,11 @@ function plot_wavepal_surrogates_distribution_csd(;event_no = 2, plim = plim,
                 boundary = (0.9*minimum(surr_slopes[event_no,:]),1.1*maximum(surr_slopes[event_no,:]))
                 )
         lines!(axv, 1:5,1:5, color = cm[1], linewidth=2, label = "KDE", visible = false)
-        vlines!(axv,[quantile(surr_slopes[event_no,:],1-plim)], color = cm[3], linewidth = 2, label = "$(1-plim) confidence level" )
+        
         vlines!(axv,[true_slopes[event_no]], color = cm[2], 
                 linewidth = 2,
                 label = "observed trend")
+        vlines!(axv,[quantile(surr_slopes[event_no,:],1-plim)], color = cm[3], linewidth = 2, linestyle=:dash, label = "$(1-plim) confidence level" )
 
         Label(gl[1,1,TopLeft()], letters[k], fontsize = 20,
                 font = :bold, padding = (0,5,5,0),
@@ -4133,7 +6540,7 @@ function plot_wavepal_surrogates_distribution_csd(;event_no = 2, plim = plim,
 end
 
 plot_wavepal_surrogates_distribution_csd(event_no = 2, plim = plim, showing = showing, saving = saving, 
-                saveto = "figures/figS5.pdf")
+                saveto = "do_ews_across_greenland_ice_cores/figures/new_figS5.pdf")
 
 
 
@@ -4153,7 +6560,7 @@ function plot_wavepal_surrogates_distribution_wave(;event_no = 2,plim = plim,
         elseif k == 2
             true_slopes = wavepal_file["slopes_h"][:,1,1]
             surr_slopes = wavepal_file["slopes_h"][:,2:end,1]
-            ind_title = L"\textbf{\mathrm{\hat{𝖧}}}"
+            ind_title = L"\textbf{\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}}"
         end
         axv = Axis(gl[1,1], 
             title = ind_title, 
@@ -4174,12 +6581,14 @@ function plot_wavepal_surrogates_distribution_wave(;event_no = 2,plim = plim,
                 )
         lines!(axv, 1:5,1:5, color = cm[1], linewidth=2, label = "KDE", visible = false)
         
-        vlines!(axv,[quantile(surr_slopes[event_no,:],1-plim)], color = cm[3], 
-                linewidth = 2,
-                label = "$(1-plim) confidence level")
+        
         vlines!(axv,[true_slopes[event_no]], color = cm[2], 
                 linewidth = 2,
                 label = "observed trend")
+        vlines!(axv,[quantile(surr_slopes[event_no,:],1-plim)], color = cm[3], 
+                linewidth = 2,
+                linestyle=:dash,
+                label = "$(1-plim) confidence level")
 
         Label(gl[1,1,TopLeft()], letters[k], fontsize = 20,
                 font = :bold, padding = (0,5,5,0),
@@ -4204,7 +6613,7 @@ function plot_wavepal_surrogates_distribution_wave(;event_no = 2,plim = plim,
 end
 
 plot_wavepal_surrogates_distribution_wave(event_no = 2,plim = plim, showing = showing, saving = saving, 
-                        saveto = "figures/figS6.pdf")
+                        saveto = "do_ews_across_greenland_ice_cores/figures/new_figS6.pdf")
 
 
 
@@ -4318,7 +6727,7 @@ function plot_wavepal_compare_csd_ts_label(;lowpass = false, plim = plim, legend
         glv = f_csd_ts[i,1] = GridLayout()
         gla = f_csd_ts[i,2] = GridLayout()
         axv = Axis(glv[1,1], 
-                ylabel = L"\mathrm{σ^𝟤}", 
+                ylabel = L"\mathrm{𝖵}", 
                 ylabelsize = 18,
                 ylabelfont = :bold,
                 xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -4438,7 +6847,7 @@ function plot_wavepal_compare_csd_ts_label(;lowpass = false, plim = plim, legend
                 font = :bold, padding = (0,30,-10,15),
                 halign = :left,valign =:bottom)
 
-        Label(f_csd_ts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\sigma^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{\alpha}_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(f_csd_ts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{𝖵} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{\alpha}_𝟣} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                 padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
     end
     if legend
@@ -4503,7 +6912,7 @@ function plot_wavepal_compare_wave_ts_label(;lowpass=lowpass, plim = plim, legen
                 xticks = (10_000:5_000:60_000, string.(10:5:60)), 
                 )
         axa = Axis(gla[1,1], 
-                ylabel = L"\mathrm{\hat{𝖧}}", 
+                ylabel = L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}", 
                 ylabelsize = 18,
                 ylabelfont = :bold,
                 xticks = (10_000:5_000:60_000, string.(10:5:60)), 
@@ -4613,7 +7022,7 @@ function plot_wavepal_compare_wave_ts_label(;lowpass=lowpass, plim = plim, legen
         Label(gla[1,1,TopLeft()], letters_h[2,whichletter], fontsize = 20,
                 font = :bold, padding = (0,30,-10,15),
                 halign = :left,valign =:bottom)
-        Label(f_csd_ts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+        Label(f_csd_ts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
                 padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
     end
     if legend
@@ -4643,10 +7052,193 @@ function plot_wavepal_compare_wave_ts_label(;lowpass=lowpass, plim = plim, legen
     end
 end
 
-plot_wavepal_compare_wave_ts_label(lowpass=true, plim = plim, legend = true, showing = showing, saving = saving, saveto = "figures/fig8.pdf")
-plot_wavepal_compare_wave_ts_label(lowpass=false, plim = plim, legend = true, showing = showing, saving = saving, saveto = "figures/figS20.pdf")
+plot_wavepal_compare_wave_ts_label(lowpass=true, plim = plim, legend = true, showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig8.pdf")
+plot_wavepal_compare_wave_ts_label(lowpass=false, plim = plim, legend = true, showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS20.pdf")
 
 
+function plot_wavepal_compare_wave_ts_label_aggr(;lowpass=lowpass, plim = plim, legend = false, showing = true, saving = false, saveto = "paper/wavepal_compare_wave_ts_label_aggr_10_50_ngrip_lowpass_$(lowpass)_p_$(plim).pdf")
+    
+
+    f_csd_ts = Figure(size=(1200, 500))
+    type = "NGRIP5"
+    letters_h = reshape(letters[1:18],2,9)
+
+    whichletter = 0
+
+    if lowpass
+        sca_path = "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"
+        hurst_path = "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"
+    else
+        sca_path = "new_surrogate_files/NGRIP5/sca/s1_10_s2_50_C_no_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"
+        hurst_path = "new_surrogate_files/NGRIP5/hurst/s1_10_s2_50_C_no_lowpass_MORLET_orig_gs_FiltInd_false_normalise_false_nocoi_true_onlyfull_true_smoothw_false_10000_TFTS.jld2"
+    end
+    scas = load(sca_path)["slopes"]
+    hursts = load(hurst_path)["slopes"]
+    version_names = ["Regular 5-year resolution","Irregular temporal resolution"]
+    for (i,(v,a)) in enumerate(zip([scas,wavepal_indicators[3]], [hursts, wavepal_indicators[4]]))
+        glv = f_csd_ts[i,1] = GridLayout()
+        gla = f_csd_ts[i,2] = GridLayout()
+        
+        
+        axv = Axis(glv[1,1],
+            xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+            xreversed = true,
+            xticklabelrotation = pi*0.4,
+            ylabel =  L"\mathrm{\hat{𝗐}^𝟤}", 
+            #xlabel = "Transition",
+            xminorgridwidth = 1,
+            xminorgridcolor = :grey10 ,
+            xminorgridvisible = true, 
+            xgridvisible = false,
+            yminorgridvisible = false, 
+            ygridvisible = false,
+            yticksvisible=false,
+            yticklabelsvisible=false,
+            ylabelsize = 18,
+            ylabelfont = :bold,
+            )
+        axa = Axis(gla[1,1],
+            xticks = (1:17, ["YD/PB","DO-1","DO-2","DO-3","DO-4","DO-5","DO-6","DO-7","DO-8","DO-9","DO-10","DO-11","DO-12","DO-13","DO-14","DO-15","DO-16"]) ,
+            xreversed = true,
+            xticklabelrotation = pi*0.4,
+            ylabel =  L"\mathrm{\hat{𝖧}^\text{𝗅𝗈𝖼}}", 
+            #xlabel = "Transition",
+            xminorgridwidth = 1,
+            xminorgridcolor = :grey10 ,
+            xminorgridvisible = true, 
+            xgridvisible = false,
+            yminorgridvisible = false, 
+            ygridvisible = false,
+            yticksvisible=false,
+            yticklabelsvisible=false,
+            ylabelsize = 18,
+            ylabelfont = :bold,
+            )
+
+        whichletter +=1
+        n_v = 0 
+        n_a = 0
+        n_both = 0
+        which_v = []
+
+        if whichletter == 2
+            axv.xlabel = "Event"
+            axa.xlabel = "Event"
+        else
+            hidexdecorations!(axv, grid=false, minorgrid=false)
+            hidespines!(axv, :b) 
+            hidexdecorations!(axa, grid=false, minorgrid=false)
+            hidespines!(axa, :b) 
+        end
+
+        if i>1
+            hidespines!(axv,:t)
+            hidespines!(axa,:t)
+        end
+
+
+        mv = zeros(17,1)
+        ma = zeros(17,1)
+        for ev in 1:17
+            #va = 0.4
+            #vl = 2.0
+            #vsc = (:white,1.0)
+            #vc = :black
+            if typeof(v.slopes[ev]) != Nothing
+                if v.slopes[ev] >0 
+                    mv[ev,1]+=1
+                    #pone = count(v -> v ≥ true_slopes[ev], surr_slopes[ev,:])/length(surr_slopes[ev,:])
+            #        vc = :red
+            #        vsc = (:darkred,0.1)
+                    if v.p_one[ev] < plim
+                        mv[ev,1]+=1
+            #            va = 0.9
+            #            vl = 3.5
+            #            vsc = (:darkred,0.8)
+                        
+                        n_v +=1
+                        push!(which_v, ev)
+                        
+                    end
+                end
+            end
+
+            if typeof(a.slopes[ev]) != Nothing
+                if a.slopes[ev] >0 
+                    ma[ev,1]+=1
+                    #pone = count(v -> v ≥ true_slopes[ev], surr_slopes[ev,:])/length(surr_slopes[ev,:])
+            #        vc = :red
+            #        vsc = (:darkred,0.1)
+                    if a.p_one[ev] < plim
+                        ma[ev,1]+=1
+            #            va = 0.9
+            #            vl = 3.5
+            #            vsc = (:darkred,0.8)
+                        n_a +=1
+                        if ev in which_v
+                            n_both +=1
+                        end
+                    end
+                end
+            end
+
+
+        end
+        co2 = cgrad([:steelblue, :darkred, :darkred], 3, categorical = true, alpha=[0.1,0.1,0.8])
+        hmv = heatmap!(axv, mv, colormap=co2, colorrange=(0,2))
+        hma = heatmap!(axa, ma, colormap=co2, colorrange=(0,2))
+        # xlims!(axv,nothing,nothing)
+        # axv.xreversed = true
+        # xlims!(ax_event, axv.xaxis.attributes.limits[]...)
+    
+
+
+        Label(glv[1,1,TopLeft()], letters_h[1,whichletter], fontsize = 20,
+                    font = :bold, padding = (0,20,-10,15),
+                    halign = :left, valign =:bottom)
+        Label(gla[1,1,TopLeft()], letters_h[2,whichletter], fontsize = 20,
+                    font = :bold, padding = (0,20,-10,15),
+                    halign = :left, valign =:bottom)
+        Label(f_csd_ts[i,1:end,Top()], L"\textbf{\textrm{%$(sstring(version_names[i])): } \mathrm{𝗇_{\hat{𝗐}^𝟤} = %$(sstring(n_v)), } \mathrm{𝗇_{\hat{𝖧}^\text{𝗅𝗈𝖼}} = %$(sstring(n_a)), } \mathrm{𝗇_{𝖻𝗈𝗍𝗁} = %$(sstring(n_both))}}" ,
+                    padding = (0.0,0.0,20.0,20.0), valign = :center, font = :bold, fontsize = 20)
+    end
+    
+
+    
+    
+    if legend
+        # elems = [
+        #     [LineElement(color= (:black, 0.4), points = Point2f[(0, 0.5), (0.5, 0.5)]), LineElement(color= (:black, 0.9), points = Point2f[(0.5, 0.5), (1, 0.5)])],
+        #     [PolyElement(color = (:darkred, 0.1), strokewidth = 0), LineElement(color= (:red,0.4), linewidth=2.0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:steelblue,0.1), strokewidth = 0), LineElement(color= (:blue, 0.4), linewidth=2.0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+        #     [PolyElement(color = (:darkred, 0.8), strokewidth = 0), LineElement(color= (:red,0.9), linewidth=3.5)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+        #     ]
+        # labels = ["EWS indicator", "increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        elems = [
+            [PolyElement(color = (:steelblue,0.1), strokewidth = 0)],#,LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.1), strokewidth = 0)],# LineElement(color = (:darkred,0.4), linewidth= 2.0,points = Point2f[(1, 0), (1, 1)])],
+            [PolyElement(color = (:darkred, 0.8), strokewidth = 0)],#,LineElement(color = (:darkred,0.9), linewidth= 3.5,points = Point2f[(1, 0), (1, 1)])]]
+            ]
+        labels = ["increasing", "decreasing", "significantly increasing (𝗉<0.05)"]
+        Legend(f_csd_ts[end+1,1:end], elems, labels, orientation = :horizontal, valign = :bottom, margin = (10,10,10,10)) 
+    end
+
+    colgap!(f_csd_ts.layout, 20)
+    rowgap!(f_csd_ts.layout, 0)
+
+    
+    Label(f_csd_ts[1,1:end,Top()], "EWS in (10-50) year band of NGRIP record", padding = (0.0,0.0,80.0,3.0), valign = :bottom, font = :bold, fontsize = 20)
+
+    if saving
+        save(saveto,f_csd_ts)
+    end
+    if showing
+        display(f_csd_ts)
+    end
+end
+
+plot_wavepal_compare_wave_ts_label_aggr(lowpass=true, plim = plim, legend = saving, showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/fig8_aggr.pdf")
+plot_wavepal_compare_wave_ts_label_aggr(lowpass=false, plim = plim, legend = true, showing = showing, saving = saving, saveto = "do_ews_across_greenland_ice_cores/figures/figS20_aggr.pdf")
 
 #Fig A1
 function plot_sampling_steps_ngrip(;showing=true, saving=false, saveto = "paper/raw_NGRIP_sampling.pdf")
@@ -4882,6 +7474,10 @@ end
 
 
 plot_map(showing=showing, saving = saving, saveto = "figures/fig1.pdf")
+
+
+
+
 
 
 
