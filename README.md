@@ -1,4 +1,4 @@
-# Early warning signals for Dansgaard-Oeschger events across Greenland ice cores
+# Early warning signal analysis of Dansgaard-Oeschger events across Greenland ice cores
 Code for the analysis of EWS for DO events across Greenland ice core records related to
 
 Hummel, C., Boers, N., and Rypdal, M. (2025): Inconclusive early warning signals for Dansgaard-Oeschger events across Greenland ice cores, [preprint], https://doi.org/10.5194/egusphere-2024-3567
